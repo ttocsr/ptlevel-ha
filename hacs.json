@@ -1,0 +1,6 @@
+{
+  "name": "PTLevel Direct to Device",
+  "render_readme": true,
+  "file_name": "ptlevel",
+  "iot_class": "local_polling"
+}
