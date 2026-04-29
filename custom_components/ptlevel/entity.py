@@ -3,6 +3,7 @@ from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from .const import DOMAIN, CONF_IP_ADDRESS, CONF_CONNECTION_TYPE, CONNECTION_LOCAL
 
 class PTLevelBaseEntity(CoordinatorEntity):
+    """Base class to link all entities to a single Device Registry entry."""
     _attr_has_entity_name = True
     
     def __init__(self, coordinator, entry, specific_device_id=None):
@@ -16,6 +17,16 @@ class PTLevelBaseEntity(CoordinatorEntity):
         if self._specific_device_id and "rest_devices" in self.coordinator.data:
             return self.coordinator.data["rest_devices"].get(self._specific_device_id, {})
         return self.coordinator.data
+
+    @property
+    def hardware_id(self):
+        """Generates a universal ID based strictly on the MAC address."""
+        mac = self.target_data.get("mac")
+        if mac:
+            # Strip any colons and ensure uppercase for a perfect match across APIs
+            return str(mac).replace(":", "").upper()
+        # Fallback to entry ID only if MAC is somehow missing
+        return self.entry.entry_id
 
     @property
     def device_info(self):
