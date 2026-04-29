@@ -25,6 +25,7 @@ CONNECTION_OAUTH2 = "oauth2"
 class PTLevelConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMAIN):
     """Handle a config flow for PTLevel."""
 
+    DOMAIN = DOMAIN
     VERSION = 1
 
     @property
@@ -59,7 +60,7 @@ class PTLevelConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, doma
                 return await self.async_step_cloud()
             else:
                 # Kicks off Home Assistant's built-in OAuth2 Web Redirect logic
-                return await super().async_step_user()
+                return await self.async_step_pick_implementation()
 
         return self.async_show_form(
             step_id="user",
