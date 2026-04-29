@@ -1,10 +1,12 @@
 import logging
 import aiohttp
 import json
+import voluptuous as vol
 from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -106,6 +108,51 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if conn_type == CONNECTION_REST:
         implementation = await config_entry_oauth2_flow.async_get_config_entry_implementation(hass, entry)
         session = config_entry_oauth2_flow.OAuth2Session(hass, entry, implementation)
+
+    async def handle_rest_calibrate(call):
+        """Handle the custom REST API calibration service."""
+        device_id = call.data.get("device_id")
+        tank_height = float(call.data.get("tank_height"))
+        water_height = float(call.data.get("water_height"))
+        
+        # Perform the user's calibration math
+        pct = int(round((water_height / tank_height) * 100))
+        
+        # Execute the REST API command
+        if session: 
+            await session.async_ensure_token_valid()
+            access_token = session.token["access_token"]
+            client = async_get_clientsession(hass)
+            headers = {
+                "Authorization": f"Bearer {access_token}", 
+                "Content-Type": "application/json",
+                "Accept": "*/*"
+            }
+            payload = {"calibration_value": pct}
+            
+            url = f"https://ptdevices.com/v1/device/{device_id}/calibrate"
+            try:
+                async with client.post(url, headers=headers, json=payload, timeout=10) as resp:
+                    if resp.status != 200:
+                        _LOGGER.error(f"PTLevel Calibration failed with status: {resp.status}")
+                    else:
+                        _LOGGER.info(f"Successfully calibrated PTLevel {device_id} to {pct}%")
+                        await coordinator.async_request_refresh()
+            except Exception as e:
+                _LOGGER.error(f"Error sending calibration to PTLevel: {e}")
+
+    # Register the service for automation usage
+    if conn_type == CONNECTION_REST:
+        hass.services.async_register(
+            DOMAIN, 
+            "calibrate_rest_level", 
+            handle_rest_calibrate,
+            schema=vol.Schema({
+                vol.Required("device_id"): cv.string,
+                vol.Required("tank_height"): vol.Coerce(float),
+                vol.Required("water_height"): vol.Coerce(float),
+            })
+        )
 
     async def async_update_data():
         if conn_type == CONNECTION_REST:

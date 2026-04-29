@@ -4,8 +4,13 @@ CONF_IP_ADDRESS = "ip_address"
 CONF_API_TOKEN = "api_token"
 CONF_DEVICE_ID = "device_id"
 CONF_TANK_SIZE = "tank_size"
+CONF_VOLUME_UNIT = "volume_unit"
 CONF_FULL_AD = "full_ad"
 
 CONNECTION_LOCAL = "local"
 CONNECTION_TOKEN = "token"
 CONNECTION_REST = "rest_api"
+
+UNIT_LITERS = "Liters"
+UNIT_IMP_GAL = "Imperial Gallons"
+UNIT_US_GAL = "US Gallons"

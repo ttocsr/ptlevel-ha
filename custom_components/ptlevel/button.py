@@ -9,7 +9,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         async_add_entities([PTLevelCalibrateButton(coordinator, entry)])
 
 class PTLevelCalibrateButton(PTLevelBaseEntity, ButtonEntity):
-    _attr_name = "Calibrate Full Level"
+    _attr_name = "Set Full Point"
     _attr_icon = "mdi:car-coolant-level"
 
     def __init__(self, coordinator, entry):
