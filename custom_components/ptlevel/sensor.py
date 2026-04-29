@@ -100,7 +100,7 @@ class PTLevelZeroSensor(CoordinatorEntity, SensorEntity):
 class PTLevelBatterySensor(CoordinatorEntity, SensorEntity):
     _attr_name = "Cistern Battery"
     # Change to UnitOfElectricPotential.VOLTS if your API reports raw voltage instead of %.
-    _attr_native_unit_of_measurement = PERCENTAGE 
+    _attr_native_unit_of_measurement = UnitOfElectricPotential.VOLTS
     _attr_device_class = SensorDeviceClass.BATTERY
     _attr_state_class = SensorStateClass.MEASUREMENT
 

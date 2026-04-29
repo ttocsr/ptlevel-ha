@@ -1,0 +1,16 @@
+--2026-04-28 19:44:44--  https://www.google.com/s2/favicons?domain=paremtech.com
+Resolving www.google.com (www.google.com)... 2001:4860:482c:7700::, 2001:4860:482d:7700::, 2001:4860:4826:7700::, ...
+Connecting to www.google.com (www.google.com)|2001:4860:482c:7700::|:443... connected.
+HTTP request sent, awaiting response... 301 Moved Permanently
+Location: https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://paremtech.com&size=16 [following]
+--2026-04-28 19:44:45--  https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://paremtech.com&size=16
+Resolving t1.gstatic.com (t1.gstatic.com)... 2607:f8b0:400a:803::2004, 142.251.46.68
+Connecting to t1.gstatic.com (t1.gstatic.com)|2607:f8b0:400a:803::2004|:443... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 213 [image/png]
+Saving to: ‘favicons?domain=paremtech.com’
+
+favicons?domain=paremtech.com            0%[                                                                             ]       0  --.-KB/s               favicons?domain=paremtech.com          100%[============================================================================>]     213  --.-KB/s    in 0s      
+
+2026-04-28 19:44:45 (145 MB/s) - ‘favicons?domain=paremtech.com’ saved [213/213]
+

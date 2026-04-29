@@ -1,6 +1,5 @@
 import logging
 import aiohttp
-import re
 import json
 from datetime import timedelta
 
@@ -13,33 +12,42 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor", "button"]
 
 async def fetch_ptlevel_data(ip_address):
-    url = f"http://{ip_address}/"
+    sensors_url = f"http://{ip_address}/get_sensors"
+    config_url = f"http://{ip_address}/config"
+    
+    combined_data = {}
+    
     async with aiohttp.ClientSession() as session:
         try:
-            async with session.get(url, timeout=10) as response:
+            # 1. Fetch the water level, zero, battery, and temperature data
+            async with session.get(sensors_url, timeout=10) as response:
                 text = await response.text()
+                sensors_json = json.loads(text)
                 
-                # Try to parse the entire response as JSON
-                try:
-                    data = json.loads(text)
-                    return data
-                except json.JSONDecodeError:
-                    pass
-                
-                # Fallback: If it's a raw string, find all key-value pairs
-                # This regex looks for pattern like  key: value  or  "key":"value"
-                matches = re.findall(r'["\']?([a-zA-Z0-9_]+)["\']?\s*:\s*["\']?([^,"\']+)', text)
-                if matches:
-                    parsed_data = {}
-                    for key, val in matches:
-                        # Try to convert numbers to floats, leave strings as strings
-                        try:
-                            parsed_data[key] = float(val)
-                        except ValueError:
-                            parsed_data[key] = val.strip()
-                    return parsed_data
+                # The API returns a list of dicts: [{"1":9994,"z":10040},{"5":18.8},{"2":6.6}]
+                if isinstance(sensors_json, list):
+                    for item in sensors_json:
+                        combined_data.update(item)
+                elif isinstance(sensors_json, dict):
+                    combined_data.update(sensors_json)
                     
-                raise ValueError(f"Could not parse data from device. Raw response: {text}")
+            # 2. Fetch the WiFi and Firmware data
+            async with session.get(config_url, timeout=10) as response:
+                text = await response.text()
+                config_json = json.loads(text)
+                if isinstance(config_json, dict):
+                    combined_data.update(config_json)
+                    
+            # 3. Map ParemTech's cryptic keys to our standard sensor keys
+            if "2" in combined_data:
+                combined_data["bat"] = combined_data["2"] # Battery Voltage
+            if "rx_rssi" in combined_data:
+                combined_data["rssi"] = combined_data["rx_rssi"] # WiFi Signal
+            if "fw_v" in combined_data:
+                combined_data["fw"] = combined_data["fw_v"] # Firmware Version
+                
+            return combined_data
+
         except Exception as err:
             raise UpdateFailed(f"Error communicating with PTLevel device: {err}")
 
