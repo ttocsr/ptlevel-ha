@@ -15,8 +15,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         PTLevelWiFiSensor(coordinator, entry),
         PTLevelFirmwareSensor(coordinator, entry),
         PTLevelIPSensor(coordinator, entry),
-        PTLevelMacSensor(coordinator, entry),
-        PTLevelDeviceIDSensor(coordinator, entry)
+        PTLevelMacSensor(coordinator, entry)
     ])
 
 # --- VOLUME & PERCENTAGE SENSORS ---
@@ -154,7 +153,7 @@ class PTLevelIPSensor(PTLevelBaseEntity, SensorEntity):
 
     @property
     def native_value(self):
-        return self.entry.data.get(CONF_IP_ADDRESS)
+        return self.coordinator.data.get('ip')
 
 class PTLevelMacSensor(PTLevelBaseEntity, SensorEntity):
     _attr_name = "MAC Address"
@@ -171,16 +170,3 @@ class PTLevelMacSensor(PTLevelBaseEntity, SensorEntity):
         if len(raw_mac) == 12:
             return ":".join(raw_mac[i:i+2] for i in range(0, 12, 2)).upper()
         return raw_mac
-
-class PTLevelDeviceIDSensor(PTLevelBaseEntity, SensorEntity):
-    _attr_name = "Device ID"
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_icon = "mdi:identifier"
-
-    def __init__(self, coordinator, entry):
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{entry.entry_id}_device_id"
-
-    @property
-    def native_value(self):
-        return self.coordinator.data.get('id')

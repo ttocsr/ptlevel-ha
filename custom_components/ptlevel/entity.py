@@ -14,11 +14,12 @@ class PTLevelBaseEntity(CoordinatorEntity):
     def device_info(self):
         info = {
             "identifiers": {(DOMAIN, self._device_id)},
-            "name": "PTLevel Cistern Monitor",
+            "name": "PTLevel Monitor",
             "manufacturer": "ParemTech",
             "model": "Wireless PTLevel",
             "sw_version": str(self.coordinator.data.get("fw_v", "Unknown")),
             "hw_version": str(self.coordinator.data.get("hw_v", "Unknown")),
+            "serial_number": str(self._device_id),  # <--- Places the ID cleanly in the Device Info card!
             "configuration_url": f"http://{self.entry.data.get(CONF_IP_ADDRESS)}/"
         }
         
