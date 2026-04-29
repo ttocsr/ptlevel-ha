@@ -26,7 +26,7 @@ class PTLevelConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, doma
     def __init__(self):
         self.discovered_ip = None
 
-async def async_step_dhcp(self, discovery_info: dhcp.DhcpServiceInfo) -> config_entries.ConfigFlowResult:
+    async def async_step_dhcp(self, discovery_info: dhcp.DhcpServiceInfo) -> config_entries.ConfigFlowResult:
         self.discovered_ip = discovery_info.ip
         mac = format_mac(discovery_info.macaddress)
         await self.async_set_unique_id(mac)
