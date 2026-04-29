@@ -1,25 +1,31 @@
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
-from homeassistant.const import PERCENTAGE, UnitOfVolume, SIGNAL_STRENGTH_DECIBELS_MILLIWATT, UnitOfElectricPotential, UnitOfTemperature, EntityCategory
-from .const import DOMAIN, CONF_TANK_SIZE, CONF_FULL_AD
+from homeassistant.const import PERCENTAGE, UnitOfVolume, UnitOfElectricPotential, UnitOfTemperature, EntityCategory
+from .const import DOMAIN, CONF_TANK_SIZE, CONF_FULL_AD, CONF_CONNECTION_TYPE, CONNECTION_LOCAL
 from .entity import PTLevelBaseEntity
 
 async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = hass.data[DOMAIN][entry.entry_id]
+    conn_type = entry.data.get(CONF_CONNECTION_TYPE, CONNECTION_LOCAL)
     
-    async_add_entities([
+    # These sensors exist for BOTH Cloud and Local
+    entities = [
         PTLevelPercentageSensor(coordinator, entry),
         PTLevelGallonsSensor(coordinator, entry),
         PTLevelTemperatureSensor(coordinator, entry),
-        PTLevelRawSensor(coordinator, entry),
-        PTLevelZeroSensor(coordinator, entry),
         PTLevelBatterySensor(coordinator, entry),
         PTLevelBatteryStatusSensor(coordinator, entry),
         PTLevelWiFiSensor(coordinator, entry),
-        PTLevelTXSignalSensor(coordinator, entry),
         PTLevelFirmwareSensor(coordinator, entry),
         PTLevelIPSensor(coordinator, entry),          
         PTLevelMacSensor(coordinator, entry)         
-    ])
+    ]
+    
+    # Only load RAW AD sensors if connected locally
+    if conn_type == CONNECTION_LOCAL:
+        entities.append(PTLevelRawSensor(coordinator, entry))
+        entities.append(PTLevelZeroSensor(coordinator, entry))
+        
+    async_add_entities(entities)
 
 # --- VOLUME & PERCENTAGE SENSORS ---
 
@@ -93,12 +99,13 @@ class PTLevelTemperatureSensor(PTLevelBaseEntity, SensorEntity):
     def native_value(self):
         return self.coordinator.data.get('temp')
 
-# --- RAW DATA SENSORS ---
+# --- RAW DATA SENSORS (Only loaded on Local API) ---
 
 class PTLevelRawSensor(PTLevelBaseEntity, SensorEntity):
     _attr_name = "Raw Value (1)"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:numeric-1-box-outline"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry)
@@ -116,6 +123,7 @@ class PTLevelZeroSensor(PTLevelBaseEntity, SensorEntity):
     _attr_name = "Zero Value (z)"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:numeric-0-box-outline"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry)
@@ -156,7 +164,8 @@ class PTLevelBatteryStatusSensor(PTLevelBaseEntity, SensorEntity):
 
 class PTLevelWiFiSensor(PTLevelBaseEntity, SensorEntity):
     _attr_name = "WiFi Signal"
-    _attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_icon = "mdi:wifi"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -165,31 +174,8 @@ class PTLevelWiFiSensor(PTLevelBaseEntity, SensorEntity):
         self._attr_unique_id = f"{entry.entry_id}_wifi"
 
     @property
-    def native_unit_of_measurement(self):
-        if 'wifi_pct' in self.coordinator.data:
-            return PERCENTAGE
-        return SIGNAL_STRENGTH_DECIBELS_MILLIWATT
-
-    @property
     def native_value(self):
-        if 'wifi_pct' in self.coordinator.data:
-            return self.coordinator.data.get('wifi_pct')
-        return self.coordinator.data.get('wifi_dbm')
-
-class PTLevelTXSignalSensor(PTLevelBaseEntity, SensorEntity):
-    _attr_name = "TX Signal"
-    _attr_native_unit_of_measurement = SIGNAL_STRENGTH_DECIBELS_MILLIWATT
-    _attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-
-    def __init__(self, coordinator, entry):
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{entry.entry_id}_tx_signal"
-
-    @property
-    def native_value(self):
-        return self.coordinator.data.get('tx_dbm')
+        return self.coordinator.data.get('wifi_pct')
 
 class PTLevelFirmwareSensor(PTLevelBaseEntity, SensorEntity):
     _attr_name = "Firmware Version"
