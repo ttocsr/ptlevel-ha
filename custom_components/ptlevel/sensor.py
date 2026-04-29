@@ -1,5 +1,5 @@
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
-from homeassistant.const import PERCENTAGE, UnitOfVolume, SIGNAL_STRENGTH_DECIBELS_MILLIWATT, UnitOfElectricPotential
+from homeassistant.const import PERCENTAGE, UnitOfVolume, SIGNAL_STRENGTH_DECIBELS_MILLIWATT, UnitOfElectricPotential, EntityCategory
 from .const import DOMAIN, CONF_TANK_SIZE, CONF_FULL_AD
 from .entity import PTLevelBaseEntity
 
@@ -13,7 +13,10 @@ async def async_setup_entry(hass, entry, async_add_entities):
         PTLevelZeroSensor(coordinator, entry),
         PTLevelBatterySensor(coordinator, entry),
         PTLevelWiFiSensor(coordinator, entry),
-        PTLevelFirmwareSensor(coordinator, entry)
+        PTLevelFirmwareSensor(coordinator, entry),
+        PTLevelIPSensor(coordinator, entry),
+        PTLevelMacSensor(coordinator, entry),
+        PTLevelDeviceIDSensor(coordinator, entry)
     ])
 
 # --- VOLUME & PERCENTAGE SENSORS ---
@@ -138,3 +141,46 @@ class PTLevelFirmwareSensor(PTLevelBaseEntity, SensorEntity):
     @property
     def native_value(self):
         return self.coordinator.data.get('fw') or self.coordinator.data.get('ver') or self.coordinator.data.get('firmware')
+# --- DIAGNOSTIC SENSORS ---
+
+class PTLevelIPSensor(PTLevelBaseEntity, SensorEntity):
+    _attr_name = "IP Address"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:ip-network"
+
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_ip"
+
+    @property
+    def native_value(self):
+        return self.entry.data.get(CONF_IP_ADDRESS)
+
+class PTLevelMacSensor(PTLevelBaseEntity, SensorEntity):
+    _attr_name = "MAC Address"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:network"
+
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_mac"
+
+    @property
+    def native_value(self):
+        raw_mac = self.coordinator.data.get('mac', '')
+        if len(raw_mac) == 12:
+            return ":".join(raw_mac[i:i+2] for i in range(0, 12, 2)).upper()
+        return raw_mac
+
+class PTLevelDeviceIDSensor(PTLevelBaseEntity, SensorEntity):
+    _attr_name = "Device ID"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:identifier"
+
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_device_id"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get('id')
