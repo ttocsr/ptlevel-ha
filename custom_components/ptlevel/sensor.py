@@ -7,25 +7,38 @@ async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = hass.data[DOMAIN][entry.entry_id]
     conn_type = entry.data.get(CONF_CONNECTION_TYPE, CONNECTION_LOCAL)
     
-    # These sensors exist for BOTH Cloud and Local
-    entities = [
-        PTLevelPercentageSensor(coordinator, entry),
-        PTLevelGallonsSensor(coordinator, entry),
-        PTLevelTemperatureSensor(coordinator, entry),
-        PTLevelBatterySensor(coordinator, entry),
-        PTLevelBatteryStatusSensor(coordinator, entry),
-        PTLevelWiFiSensor(coordinator, entry),
-        PTLevelFirmwareSensor(coordinator, entry),
-        PTLevelIPSensor(coordinator, entry),          
-        PTLevelMacSensor(coordinator, entry)         
+    entities = []
+    
+    # If REST, create a full set of sensors for every device in the account!
+    if "rest_devices" in coordinator.data:
+        for device_id in coordinator.data["rest_devices"]:
+            entities.extend(create_sensors(coordinator, entry, conn_type, device_id))
+    else:
+        # Standard Single Device Setup
+        entities.extend(create_sensors(coordinator, entry, conn_type, None))
+        
+    async_add_entities(entities)
+
+def create_sensors(coordinator, entry, conn_type, device_id):
+    """Helper to generate a set of sensors for a specific device."""
+    sensors = [
+        PTLevelPercentageSensor(coordinator, entry, device_id),
+        PTLevelGallonsSensor(coordinator, entry, device_id),
+        PTLevelTemperatureSensor(coordinator, entry, device_id),
+        PTLevelBatterySensor(coordinator, entry, device_id),
+        PTLevelBatteryStatusSensor(coordinator, entry, device_id),
+        PTLevelWiFiSensor(coordinator, entry, device_id),
+        PTLevelFirmwareSensor(coordinator, entry, device_id),
+        PTLevelIPSensor(coordinator, entry, device_id),          
+        PTLevelMacSensor(coordinator, entry, device_id)         
     ]
     
     # Only load RAW AD sensors if connected locally
     if conn_type == CONNECTION_LOCAL:
-        entities.append(PTLevelRawSensor(coordinator, entry))
-        entities.append(PTLevelZeroSensor(coordinator, entry))
+        sensors.append(PTLevelRawSensor(coordinator, entry, device_id))
+        sensors.append(PTLevelZeroSensor(coordinator, entry, device_id))
         
-    async_add_entities(entities)
+    return sensors
 
 # --- VOLUME & PERCENTAGE SENSORS ---
 
@@ -35,17 +48,19 @@ class PTLevelPercentageSensor(PTLevelBaseEntity, SensorEntity):
     _attr_device_class = SensorDeviceClass.WATER
     _attr_state_class = SensorStateClass.MEASUREMENT
 
-    def __init__(self, coordinator, entry):
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{entry.entry_id}_percentage"
+    def __init__(self, coordinator, entry, device_id=None):
+        super().__init__(coordinator, entry, device_id)
+        prefix = f"{entry.entry_id}_{device_id}" if device_id else entry.entry_id
+        self._attr_unique_id = f"{prefix}_percentage"
 
     @property
     def native_value(self):
-        if 'cloud_percent' in self.coordinator.data:
-            return self.coordinator.data['cloud_percent']
+        data = self.target_data
+        if 'cloud_percent' in data:
+            return data['cloud_percent']
             
-        current_ad = self.coordinator.data.get('1')
-        zero_ad = self.coordinator.data.get('z')
+        current_ad = data.get('1')
+        zero_ad = data.get('z')
         full_ad = self.entry.data.get(CONF_FULL_AD)
         
         if current_ad is None or zero_ad is None or not full_ad: return None
@@ -60,22 +75,24 @@ class PTLevelGallonsSensor(PTLevelBaseEntity, SensorEntity):
     _attr_device_class = SensorDeviceClass.WATER
     _attr_state_class = SensorStateClass.MEASUREMENT
 
-    def __init__(self, coordinator, entry):
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{entry.entry_id}_gallons"
+    def __init__(self, coordinator, entry, device_id=None):
+        super().__init__(coordinator, entry, device_id)
+        prefix = f"{entry.entry_id}_{device_id}" if device_id else entry.entry_id
+        self._attr_unique_id = f"{prefix}_gallons"
 
     @property
     def native_value(self):
+        data = self.target_data
         tank_size = self.entry.data.get(CONF_TANK_SIZE, 0)
         
-        if 'cloud_percent' in self.coordinator.data:
-            pct = self.coordinator.data['cloud_percent']
+        if 'cloud_percent' in data:
+            pct = data['cloud_percent']
             if pct is not None:
                 return round((float(pct) / 100) * float(tank_size), 1)
             return None
             
-        current_ad = self.coordinator.data.get('1')
-        zero_ad = self.coordinator.data.get('z')
+        current_ad = data.get('1')
+        zero_ad = data.get('z')
         full_ad = self.entry.data.get(CONF_FULL_AD)
         
         if current_ad is None or zero_ad is None or not full_ad: return None
@@ -91,13 +108,14 @@ class PTLevelTemperatureSensor(PTLevelBaseEntity, SensorEntity):
     _attr_device_class = SensorDeviceClass.TEMPERATURE
     _attr_state_class = SensorStateClass.MEASUREMENT
 
-    def __init__(self, coordinator, entry):
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{entry.entry_id}_temperature"
+    def __init__(self, coordinator, entry, device_id=None):
+        super().__init__(coordinator, entry, device_id)
+        prefix = f"{entry.entry_id}_{device_id}" if device_id else entry.entry_id
+        self._attr_unique_id = f"{prefix}_temperature"
 
     @property
     def native_value(self):
-        return self.coordinator.data.get('temp')
+        return self.target_data.get('temp')
 
 # --- RAW DATA SENSORS (Only loaded on Local API) ---
 
@@ -107,17 +125,18 @@ class PTLevelRawSensor(PTLevelBaseEntity, SensorEntity):
     _attr_icon = "mdi:numeric-1-box-outline"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
-    def __init__(self, coordinator, entry):
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{entry.entry_id}_raw"
+    def __init__(self, coordinator, entry, device_id=None):
+        super().__init__(coordinator, entry, device_id)
+        prefix = f"{entry.entry_id}_{device_id}" if device_id else entry.entry_id
+        self._attr_unique_id = f"{prefix}_raw"
 
     @property
     def native_value(self):
-        return self.coordinator.data.get('1')
+        return self.target_data.get('1')
 
     @property
     def extra_state_attributes(self):
-        return self.coordinator.data
+        return self.target_data
 
 class PTLevelZeroSensor(PTLevelBaseEntity, SensorEntity):
     _attr_name = "Zero Value (z)"
@@ -125,13 +144,14 @@ class PTLevelZeroSensor(PTLevelBaseEntity, SensorEntity):
     _attr_icon = "mdi:numeric-0-box-outline"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
-    def __init__(self, coordinator, entry):
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{entry.entry_id}_zero"
+    def __init__(self, coordinator, entry, device_id=None):
+        super().__init__(coordinator, entry, device_id)
+        prefix = f"{entry.entry_id}_{device_id}" if device_id else entry.entry_id
+        self._attr_unique_id = f"{prefix}_zero"
 
     @property
     def native_value(self):
-        return self.coordinator.data.get('z')
+        return self.target_data.get('z')
 
 # --- DEVICE HEALTH SENSORS ---
 
@@ -141,26 +161,28 @@ class PTLevelBatterySensor(PTLevelBaseEntity, SensorEntity):
     _attr_device_class = SensorDeviceClass.BATTERY
     _attr_state_class = SensorStateClass.MEASUREMENT
 
-    def __init__(self, coordinator, entry):
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{entry.entry_id}_battery"
+    def __init__(self, coordinator, entry, device_id=None):
+        super().__init__(coordinator, entry, device_id)
+        prefix = f"{entry.entry_id}_{device_id}" if device_id else entry.entry_id
+        self._attr_unique_id = f"{prefix}_battery"
 
     @property
     def native_value(self):
-        return self.coordinator.data.get('bat')
+        return self.target_data.get('bat')
 
 class PTLevelBatteryStatusSensor(PTLevelBaseEntity, SensorEntity):
     _attr_name = "Battery Status"
     _attr_icon = "mdi:battery-check"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
-    def __init__(self, coordinator, entry):
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{entry.entry_id}_battery_status"
+    def __init__(self, coordinator, entry, device_id=None):
+        super().__init__(coordinator, entry, device_id)
+        prefix = f"{entry.entry_id}_{device_id}" if device_id else entry.entry_id
+        self._attr_unique_id = f"{prefix}_battery_status"
 
     @property
     def native_value(self):
-        return self.coordinator.data.get('bat_status')
+        return self.target_data.get('bat_status')
 
 class PTLevelWiFiSensor(PTLevelBaseEntity, SensorEntity):
     _attr_name = "WiFi Signal"
@@ -169,52 +191,56 @@ class PTLevelWiFiSensor(PTLevelBaseEntity, SensorEntity):
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
-    def __init__(self, coordinator, entry):
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{entry.entry_id}_wifi"
+    def __init__(self, coordinator, entry, device_id=None):
+        super().__init__(coordinator, entry, device_id)
+        prefix = f"{entry.entry_id}_{device_id}" if device_id else entry.entry_id
+        self._attr_unique_id = f"{prefix}_wifi"
 
     @property
     def native_value(self):
-        return self.coordinator.data.get('wifi_pct')
+        return self.target_data.get('wifi_pct')
 
 class PTLevelFirmwareSensor(PTLevelBaseEntity, SensorEntity):
     _attr_name = "Firmware Version"
     _attr_icon = "mdi:cellphone-arrow-down"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
-    def __init__(self, coordinator, entry):
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{entry.entry_id}_firmware"
+    def __init__(self, coordinator, entry, device_id=None):
+        super().__init__(coordinator, entry, device_id)
+        prefix = f"{entry.entry_id}_{device_id}" if device_id else entry.entry_id
+        self._attr_unique_id = f"{prefix}_firmware"
 
     @property
     def native_value(self):
-        return self.coordinator.data.get('fw')
+        return self.target_data.get('fw')
 
 class PTLevelIPSensor(PTLevelBaseEntity, SensorEntity):
     _attr_name = "IP Address"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:ip-network"
 
-    def __init__(self, coordinator, entry):
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{entry.entry_id}_ip"
+    def __init__(self, coordinator, entry, device_id=None):
+        super().__init__(coordinator, entry, device_id)
+        prefix = f"{entry.entry_id}_{device_id}" if device_id else entry.entry_id
+        self._attr_unique_id = f"{prefix}_ip"
 
     @property
     def native_value(self):
-        return self.coordinator.data.get('ip')
+        return self.target_data.get('ip')
 
 class PTLevelMacSensor(PTLevelBaseEntity, SensorEntity):
     _attr_name = "MAC Address"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:network"
 
-    def __init__(self, coordinator, entry):
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{entry.entry_id}_mac"
+    def __init__(self, coordinator, entry, device_id=None):
+        super().__init__(coordinator, entry, device_id)
+        prefix = f"{entry.entry_id}_{device_id}" if device_id else entry.entry_id
+        self._attr_unique_id = f"{prefix}_mac"
 
     @property
     def native_value(self):
-        raw_mac = self.coordinator.data.get('mac', '')
+        raw_mac = self.target_data.get('mac', '')
         if len(raw_mac) == 12:
             return ":".join(raw_mac[i:i+2] for i in range(0, 12, 2)).upper()
         return raw_mac
