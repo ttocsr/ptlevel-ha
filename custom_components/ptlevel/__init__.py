@@ -30,8 +30,9 @@ async def fetch_ptlevel_local_data(ip_address):
                 if isinstance(config_json, dict): combined_data.update(config_json)
             
             combined_data["bat"] = combined_data.get("2", combined_data.get("bat"))
-            combined_data["rssi"] = combined_data.get("rx_rssi", combined_data.get("wifi"))
+            combined_data["wifi_dbm"] = combined_data.get("rx_rssi", combined_data.get("wifi"))
             combined_data["fw"] = combined_data.get("fw_v")
+            combined_data["temp"] = combined_data.get("5")
             return combined_data
         except Exception as err:
             raise UpdateFailed(f"Error communicating with local PTLevel device: {err}")
@@ -44,18 +45,27 @@ async def fetch_ptlevel_token_data(device_id, api_token):
                 text = await response.text()
                 json_response = json.loads(text)
                 data = json_response.get("data", {})
+                device_data = data.get("device_data", {})
                 
-                # Normalize cloud keys to match our local architecture
+                # Safely strip strings from values
+                wifi_raw = str(data.get("wifi_signal", ""))
+                wifi_pct = float(wifi_raw.replace("%", "")) if "%" in wifi_raw else None
+                
+                tx_raw = str(data.get("tx_signal", ""))
+                tx_dbm = float(tx_raw.replace("dBm", "")) if "dBm" in tx_raw else None
+                
                 return {
                     "id": data.get("device_id"),
                     "mac": data.get("device_id"),
                     "ip": data.get("local_ip"),
                     "fw": data.get("version"),
-                    "rssi": data.get("wifi_signal"),
-                    "bat": data.get("device_data", {}).get("battery_voltage"),
-                    "cloud_percent": data.get("device_data", {}).get("percent_level"),
-                    "cloud_temp": data.get("device_data", {}).get("enclosure_temperature"),
-                    "raw_cloud_payload": data # Dump everything into attributes
+                    "wifi_pct": wifi_pct,
+                    "tx_dbm": tx_dbm,
+                    "bat": device_data.get("battery_voltage"),
+                    "bat_status": device_data.get("battery_status"),
+                    "cloud_percent": device_data.get("percent_level"),
+                    "temp": device_data.get("enclosure_temperature"),
+                    "raw_cloud_payload": data 
                 }
         except Exception as err:
             raise UpdateFailed(f"Error communicating with PTLevel Cloud API: {err}")

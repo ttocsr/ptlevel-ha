@@ -1,5 +1,5 @@
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
-from homeassistant.const import PERCENTAGE, UnitOfVolume, SIGNAL_STRENGTH_DECIBELS_MILLIWATT, UnitOfElectricPotential, EntityCategory
+from homeassistant.const import PERCENTAGE, UnitOfVolume, SIGNAL_STRENGTH_DECIBELS_MILLIWATT, UnitOfElectricPotential, UnitOfTemperature, EntityCategory
 from .const import DOMAIN, CONF_TANK_SIZE, CONF_FULL_AD
 from .entity import PTLevelBaseEntity
 
@@ -9,19 +9,22 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities([
         PTLevelPercentageSensor(coordinator, entry),
         PTLevelGallonsSensor(coordinator, entry),
+        PTLevelTemperatureSensor(coordinator, entry),
         PTLevelRawSensor(coordinator, entry),
         PTLevelZeroSensor(coordinator, entry),
         PTLevelBatterySensor(coordinator, entry),
+        PTLevelBatteryStatusSensor(coordinator, entry),
         PTLevelWiFiSensor(coordinator, entry),
+        PTLevelTXSignalSensor(coordinator, entry),
         PTLevelFirmwareSensor(coordinator, entry),
-        PTLevelIPSensor(coordinator, entry),
-        PTLevelMacSensor(coordinator, entry)
+        PTLevelIPSensor(coordinator, entry),          
+        PTLevelMacSensor(coordinator, entry)         
     ])
 
 # --- VOLUME & PERCENTAGE SENSORS ---
 
 class PTLevelPercentageSensor(PTLevelBaseEntity, SensorEntity):
-    _attr_name = "PTlevel Level"
+    _attr_name = "Level"
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_device_class = SensorDeviceClass.WATER
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -29,18 +32,6 @@ class PTLevelPercentageSensor(PTLevelBaseEntity, SensorEntity):
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry)
         self._attr_unique_id = f"{entry.entry_id}_percentage"
-
-    @property
-    def native_value(self):
-        current_ad = self.coordinator.data.get('1')
-        zero_ad = self.coordinator.data.get('z')
-        full_ad = self.entry.data.get(CONF_FULL_AD)
-        
-        if current_ad is None or zero_ad is None or not full_ad: return None
-        if full_ad == zero_ad: return 0
-            
-        pct = ((float(current_ad) - float(zero_ad)) / (float(full_ad) - float(zero_ad))) * 100
-        return round(max(0, min(100, pct)), 1)
 
     @property
     def native_value(self):
@@ -58,7 +49,7 @@ class PTLevelPercentageSensor(PTLevelBaseEntity, SensorEntity):
         return round(max(0, min(100, pct)), 1)
 
 class PTLevelGallonsSensor(PTLevelBaseEntity, SensorEntity):
-    _attr_name = "PTlevel Volume"
+    _attr_name = "Volume"
     _attr_native_unit_of_measurement = UnitOfVolume.GALLONS
     _attr_device_class = SensorDeviceClass.WATER
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -66,20 +57,6 @@ class PTLevelGallonsSensor(PTLevelBaseEntity, SensorEntity):
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry)
         self._attr_unique_id = f"{entry.entry_id}_gallons"
-
-    @property
-    def native_value(self):
-        current_ad = self.coordinator.data.get('1')
-        zero_ad = self.coordinator.data.get('z')
-        full_ad = self.entry.data.get(CONF_FULL_AD)
-        tank_size = self.entry.data.get(CONF_TANK_SIZE, 0)
-        
-        if current_ad is None or zero_ad is None or not full_ad: return None
-        if full_ad == zero_ad: return 0
-            
-        pct = ((float(current_ad) - float(zero_ad)) / (float(full_ad) - float(zero_ad))) * 100
-        gallons = (max(0, min(100, pct)) / 100) * float(tank_size)
-        return round(gallons, 1)
 
     @property
     def native_value(self):
@@ -102,10 +79,24 @@ class PTLevelGallonsSensor(PTLevelBaseEntity, SensorEntity):
         gallons = (max(0, min(100, pct)) / 100) * float(tank_size)
         return round(gallons, 1)
 
+class PTLevelTemperatureSensor(PTLevelBaseEntity, SensorEntity):
+    _attr_name = "Temperature"
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_temperature"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get('temp')
+
 # --- RAW DATA SENSORS ---
 
 class PTLevelRawSensor(PTLevelBaseEntity, SensorEntity):
-    _attr_name = "PTlevel Raw Value (1)"
+    _attr_name = "Raw Value (1)"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:numeric-1-box-outline"
 
@@ -119,11 +110,10 @@ class PTLevelRawSensor(PTLevelBaseEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self):
-        """Dumps the ENTIRE /config and /get_sensors payload into the attributes"""
         return self.coordinator.data
 
 class PTLevelZeroSensor(PTLevelBaseEntity, SensorEntity):
-    _attr_name = "PTlevel Zero Value (z)"
+    _attr_name = "Zero Value (z)"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:numeric-0-box-outline"
 
@@ -138,7 +128,7 @@ class PTLevelZeroSensor(PTLevelBaseEntity, SensorEntity):
 # --- DEVICE HEALTH SENSORS ---
 
 class PTLevelBatterySensor(PTLevelBaseEntity, SensorEntity):
-    _attr_name = "PTlevel Battery"
+    _attr_name = "Battery Voltage"
     _attr_native_unit_of_measurement = UnitOfElectricPotential.VOLT
     _attr_device_class = SensorDeviceClass.BATTERY
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -149,25 +139,62 @@ class PTLevelBatterySensor(PTLevelBaseEntity, SensorEntity):
 
     @property
     def native_value(self):
-        return self.coordinator.data.get('bat') or self.coordinator.data.get('battery') or self.coordinator.data.get('v')
+        return self.coordinator.data.get('bat')
+
+class PTLevelBatteryStatusSensor(PTLevelBaseEntity, SensorEntity):
+    _attr_name = "Battery Status"
+    _attr_icon = "mdi:battery-check"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_battery_status"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get('bat_status')
 
 class PTLevelWiFiSensor(PTLevelBaseEntity, SensorEntity):
-    _attr_name = "PTlevel WiFi Signal"
-    _attr_native_unit_of_measurement = SIGNAL_STRENGTH_DECIBELS_MILLIWATT
+    _attr_name = "WiFi Signal"
     _attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
     _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry)
         self._attr_unique_id = f"{entry.entry_id}_wifi"
 
     @property
+    def native_unit_of_measurement(self):
+        if 'wifi_pct' in self.coordinator.data:
+            return PERCENTAGE
+        return SIGNAL_STRENGTH_DECIBELS_MILLIWATT
+
+    @property
     def native_value(self):
-        return self.coordinator.data.get('wifi') or self.coordinator.data.get('rssi') or self.coordinator.data.get('sig')
+        if 'wifi_pct' in self.coordinator.data:
+            return self.coordinator.data.get('wifi_pct')
+        return self.coordinator.data.get('wifi_dbm')
+
+class PTLevelTXSignalSensor(PTLevelBaseEntity, SensorEntity):
+    _attr_name = "TX Signal"
+    _attr_native_unit_of_measurement = SIGNAL_STRENGTH_DECIBELS_MILLIWATT
+    _attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_tx_signal"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get('tx_dbm')
 
 class PTLevelFirmwareSensor(PTLevelBaseEntity, SensorEntity):
-    _attr_name = "PTlevel Firmware Version"
+    _attr_name = "Firmware Version"
     _attr_icon = "mdi:cellphone-arrow-down"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry)
@@ -175,8 +202,7 @@ class PTLevelFirmwareSensor(PTLevelBaseEntity, SensorEntity):
 
     @property
     def native_value(self):
-        return self.coordinator.data.get('fw') or self.coordinator.data.get('ver') or self.coordinator.data.get('firmware')
-# --- DIAGNOSTIC SENSORS ---
+        return self.coordinator.data.get('fw')
 
 class PTLevelIPSensor(PTLevelBaseEntity, SensorEntity):
     _attr_name = "IP Address"

@@ -1,9 +1,10 @@
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
-from .const import DOMAIN, CONF_IP_ADDRESS
+from .const import DOMAIN, CONF_IP_ADDRESS, CONF_CONNECTION_TYPE, CONNECTION_LOCAL
 
 class PTLevelBaseEntity(CoordinatorEntity):
     """Base class to link all entities to a single Device Registry entry."""
+    _attr_has_entity_name = True
     
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
@@ -14,16 +15,16 @@ class PTLevelBaseEntity(CoordinatorEntity):
     def device_info(self):
         info = {
             "identifiers": {(DOMAIN, self._device_id)},
-            "name": "PTLevel Monitor",
+            "name": "PTLevel",
             "manufacturer": "ParemTech",
             "model": "Wireless PTLevel",
-            "sw_version": str(self.coordinator.data.get("fw_v", "Unknown")),
-            "hw_version": str(self.coordinator.data.get("hw_v", "Unknown")),
-            "serial_number": str(self._device_id),  # <--- Places the ID cleanly in the Device Info card!
-            "configuration_url": f"http://{self.entry.data.get(CONF_IP_ADDRESS)}/"
+            "sw_version": str(self.coordinator.data.get("fw", "Unknown")),
+            "serial_number": str(self._device_id),
         }
         
-        # Format "28372FA8D66C" into "28:37:2F:A8:D6:6C" and add to network connections
+        if self.entry.data.get(CONF_CONNECTION_TYPE, CONNECTION_LOCAL) == CONNECTION_LOCAL:
+            info["configuration_url"] = f"http://{self.entry.data.get(CONF_IP_ADDRESS)}/"
+        
         raw_mac = self.coordinator.data.get("mac")
         if raw_mac and len(raw_mac) == 12:
             formatted_mac = ":".join(raw_mac[i:i+2] for i in range(0, 12, 2))
