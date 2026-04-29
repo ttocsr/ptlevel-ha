@@ -6,13 +6,64 @@ from datetime import timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from .const import DOMAIN, CONF_IP_ADDRESS, CONF_CONNECTION_TYPE, CONF_API_TOKEN, CONF_DEVICE_ID, CONNECTION_LOCAL, CONNECTION_TOKEN
+from .const import (
+    DOMAIN, 
+    CONF_IP_ADDRESS, 
+    CONF_CONNECTION_TYPE, 
+    CONF_API_TOKEN, 
+    CONF_DEVICE_ID, 
+    CONNECTION_LOCAL, 
+    CONNECTION_TOKEN,
+    CONNECTION_REST
+)
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor", "button"]
 
+async def fetch_ptlevel_rest_data(api_token, target_device_id=None):
+    """Fetches data from the advanced REST API."""
+    url = "https://ptdevices.com/v1/devices"
+    headers = {
+        "Authorization": f"Bearer {api_token}",
+        "Accept": "application/json"
+    }
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(url, headers=headers, timeout=10) as response:
+                if response.status != 200:
+                    raise UpdateFailed(f"REST API returned status {response.status}")
+                    
+                json_response = await response.json()
+                devices = json_response.get("data", [])
+                
+                if not devices:
+                    raise UpdateFailed("No devices found on this ParemTech account.")
+                    
+                # Find specific device if provided, otherwise default to the first one in the array
+                target_data = next((d for d in devices if d.get("device_id") == target_device_id), devices[0])
+                device_data = target_data.get("device_data", {})
+                
+                wifi_raw = str(target_data.get("wifi_signal", ""))
+                wifi_pct = float(wifi_raw.replace("%", "")) if "%" in wifi_raw else None
+                
+                return {
+                    "id": target_data.get("device_id"),
+                    "mac": target_data.get("device_id"),
+                    "ip": target_data.get("local_ip"),
+                    "fw": target_data.get("version"),
+                    "wifi_pct": wifi_pct,
+                    "bat": device_data.get("battery_voltage"),
+                    "bat_status": device_data.get("battery_status"),
+                    "cloud_percent": device_data.get("percent_level"),
+                    "temp": device_data.get("enclosure_temperature"),
+                    "raw_cloud_payload": target_data 
+                }
+        except Exception as err:
+            raise UpdateFailed(f"Error communicating with PTLevel REST API: {err}")
+
 async def fetch_ptlevel_token_data(device_id, api_token):
-    """Fetches pure cloud data."""
+    """Fetches data from the standard Token API."""
     url = f"https://api.ptdevices.com/token/v1/device/{device_id}?api_token={api_token}"
     async with aiohttp.ClientSession() as session:
         try:
@@ -41,14 +92,13 @@ async def fetch_ptlevel_token_data(device_id, api_token):
             raise UpdateFailed(f"Error communicating with PTLevel Cloud API: {err}")
 
 async def fetch_ptlevel_local_data(ip_address, api_token=None):
-    """Fetches local data, and optionally merges cloud data if token is provided."""
+    """Fetches local data, and optionally merges cloud Token API data if provided."""
     sensors_url = f"http://{ip_address}/get_sensors"
     config_url = f"http://{ip_address}/config"
     combined_data = {}
     
     async with aiohttp.ClientSession() as session:
         try:
-            # 1. Fetch Local Data
             async with session.get(sensors_url, timeout=10) as response:
                 text = await response.text()
                 sensors_json = json.loads(text)
@@ -78,11 +128,9 @@ async def fetch_ptlevel_local_data(ip_address, api_token=None):
                 pct = max(0, min(100, int((rssi_val + 100) * 2)))
                 combined_data["wifi_pct"] = pct
 
-            # 2. If API Token is provided, fetch Cloud data and merge it
             if api_token and combined_data.get("mac"):
                 try:
                     cloud_data = await fetch_ptlevel_token_data(combined_data["mac"], api_token)
-                    # Merge specific cloud enhancements (preferring cloud math for percentages)
                     combined_data["cloud_percent"] = cloud_data.get("cloud_percent")
                     if cloud_data.get("bat_status"):
                         combined_data["bat_status"] = cloud_data.get("bat_status")
@@ -99,11 +147,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     conn_type = entry.data.get(CONF_CONNECTION_TYPE, CONNECTION_LOCAL)
 
     async def async_update_data():
-        if conn_type == CONNECTION_TOKEN:
+        if conn_type == CONNECTION_REST:
+            return await fetch_ptlevel_rest_data(entry.data[CONF_API_TOKEN], entry.data.get(CONF_DEVICE_ID))
+        elif conn_type == CONNECTION_TOKEN:
             return await fetch_ptlevel_token_data(entry.data[CONF_DEVICE_ID], entry.data[CONF_API_TOKEN])
         else:
             api_token = entry.data.get(CONF_API_TOKEN)
-            # Catch empty strings from the UI form
             if not api_token: api_token = None
             return await fetch_ptlevel_local_data(entry.data[CONF_IP_ADDRESS], api_token)
 

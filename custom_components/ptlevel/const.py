@@ -8,3 +8,4 @@ CONF_FULL_AD = "full_ad"
 
 CONNECTION_LOCAL = "local"
 CONNECTION_TOKEN = "token"
+CONNECTION_REST = "rest_api"

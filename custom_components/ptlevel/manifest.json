@@ -3,7 +3,6 @@
   "name": "PTLevel",
   "codeowners": ["@ttocsr"],
   "config_flow": true,
-  "dependencies": ["application_credentials"],
   "documentation": "https://github.com/ttocsr/ptlevel-ha",
   "issue_tracker": "https://github.com/ttocsr/ptlevel-ha/issues",
   "iot_class": "cloud_polling",
