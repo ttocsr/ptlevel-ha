@@ -1,10 +1,12 @@
 from homeassistant.components.button import ButtonEntity
-from .const import DOMAIN, CONF_FULL_AD
+from .const import DOMAIN, CONF_FULL_AD, CONF_CONNECTION_TYPE, CONNECTION_LOCAL
 from .entity import PTLevelBaseEntity
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    coordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([PTLevelCalibrateButton(coordinator, entry)])
+    # Only load the calibration button if we are using the Local API
+    if entry.data.get(CONF_CONNECTION_TYPE, CONNECTION_LOCAL) == CONNECTION_LOCAL:
+        coordinator = hass.data[DOMAIN][entry.entry_id]
+        async_add_entities([PTLevelCalibrateButton(coordinator, entry)])
 
 class PTLevelCalibrateButton(PTLevelBaseEntity, ButtonEntity):
     _attr_name = "Calibrate Full Level"

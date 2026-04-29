@@ -42,6 +42,21 @@ class PTLevelPercentageSensor(PTLevelBaseEntity, SensorEntity):
         pct = ((float(current_ad) - float(zero_ad)) / (float(full_ad) - float(zero_ad))) * 100
         return round(max(0, min(100, pct)), 1)
 
+    @property
+    def native_value(self):
+        if 'cloud_percent' in self.coordinator.data:
+            return self.coordinator.data['cloud_percent']
+            
+        current_ad = self.coordinator.data.get('1')
+        zero_ad = self.coordinator.data.get('z')
+        full_ad = self.entry.data.get(CONF_FULL_AD)
+        
+        if current_ad is None or zero_ad is None or not full_ad: return None
+        if full_ad == zero_ad: return 0
+            
+        pct = ((float(current_ad) - float(zero_ad)) / (float(full_ad) - float(zero_ad))) * 100
+        return round(max(0, min(100, pct)), 1)
+
 class PTLevelGallonsSensor(PTLevelBaseEntity, SensorEntity):
     _attr_name = "PTlevel Volume"
     _attr_native_unit_of_measurement = UnitOfVolume.GALLONS
@@ -58,6 +73,27 @@ class PTLevelGallonsSensor(PTLevelBaseEntity, SensorEntity):
         zero_ad = self.coordinator.data.get('z')
         full_ad = self.entry.data.get(CONF_FULL_AD)
         tank_size = self.entry.data.get(CONF_TANK_SIZE, 0)
+        
+        if current_ad is None or zero_ad is None or not full_ad: return None
+        if full_ad == zero_ad: return 0
+            
+        pct = ((float(current_ad) - float(zero_ad)) / (float(full_ad) - float(zero_ad))) * 100
+        gallons = (max(0, min(100, pct)) / 100) * float(tank_size)
+        return round(gallons, 1)
+
+    @property
+    def native_value(self):
+        tank_size = self.entry.data.get(CONF_TANK_SIZE, 0)
+        
+        if 'cloud_percent' in self.coordinator.data:
+            pct = self.coordinator.data['cloud_percent']
+            if pct is not None:
+                return round((float(pct) / 100) * float(tank_size), 1)
+            return None
+            
+        current_ad = self.coordinator.data.get('1')
+        zero_ad = self.coordinator.data.get('z')
+        full_ad = self.entry.data.get(CONF_FULL_AD)
         
         if current_ad is None or zero_ad is None or not full_ad: return None
         if full_ad == zero_ad: return 0

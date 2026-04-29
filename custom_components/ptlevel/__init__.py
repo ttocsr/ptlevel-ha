@@ -6,57 +6,69 @@ from datetime import timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from .const import DOMAIN, CONF_IP_ADDRESS
+from .const import DOMAIN, CONF_IP_ADDRESS, CONF_CONNECTION_TYPE, CONF_API_TOKEN, CONF_DEVICE_ID, CONNECTION_LOCAL, CONNECTION_TOKEN
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor", "button"]
 
-async def fetch_ptlevel_data(ip_address):
+async def fetch_ptlevel_local_data(ip_address):
     sensors_url = f"http://{ip_address}/get_sensors"
     config_url = f"http://{ip_address}/config"
-    
     combined_data = {}
-    
     async with aiohttp.ClientSession() as session:
         try:
-            # 1. Fetch the water level, zero, battery, and temperature data
             async with session.get(sensors_url, timeout=10) as response:
                 text = await response.text()
                 sensors_json = json.loads(text)
-                
-                # The API returns a list of dicts: [{"1":9994,"z":10040},{"5":18.8},{"2":6.6}]
                 if isinstance(sensors_json, list):
-                    for item in sensors_json:
-                        combined_data.update(item)
+                    for item in sensors_json: combined_data.update(item)
                 elif isinstance(sensors_json, dict):
                     combined_data.update(sensors_json)
-                    
-            # 2. Fetch the WiFi and Firmware data
             async with session.get(config_url, timeout=10) as response:
                 text = await response.text()
                 config_json = json.loads(text)
-                if isinstance(config_json, dict):
-                    combined_data.update(config_json)
-                    
-            # 3. Map ParemTech's cryptic keys to our standard sensor keys
-            if "2" in combined_data:
-                combined_data["bat"] = combined_data["2"] # Battery Voltage
-            if "rx_rssi" in combined_data:
-                combined_data["rssi"] = combined_data["rx_rssi"] # WiFi Signal
-            if "fw_v" in combined_data:
-                combined_data["fw"] = combined_data["fw_v"] # Firmware Version
-                
+                if isinstance(config_json, dict): combined_data.update(config_json)
+            
+            combined_data["bat"] = combined_data.get("2", combined_data.get("bat"))
+            combined_data["rssi"] = combined_data.get("rx_rssi", combined_data.get("wifi"))
+            combined_data["fw"] = combined_data.get("fw_v")
             return combined_data
-
         except Exception as err:
-            raise UpdateFailed(f"Error communicating with PTLevel device: {err}")
+            raise UpdateFailed(f"Error communicating with local PTLevel device: {err}")
+
+async def fetch_ptlevel_token_data(device_id, api_token):
+    url = f"https://api.ptdevices.com/token/v1/device/{device_id}?api_token={api_token}"
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(url, timeout=10) as response:
+                text = await response.text()
+                json_response = json.loads(text)
+                data = json_response.get("data", {})
+                
+                # Normalize cloud keys to match our local architecture
+                return {
+                    "id": data.get("device_id"),
+                    "mac": data.get("device_id"),
+                    "ip": data.get("local_ip"),
+                    "fw": data.get("version"),
+                    "rssi": data.get("wifi_signal"),
+                    "bat": data.get("device_data", {}).get("battery_voltage"),
+                    "cloud_percent": data.get("device_data", {}).get("percent_level"),
+                    "cloud_temp": data.get("device_data", {}).get("enclosure_temperature"),
+                    "raw_cloud_payload": data # Dump everything into attributes
+                }
+        except Exception as err:
+            raise UpdateFailed(f"Error communicating with PTLevel Cloud API: {err}")
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
-    ip_address = entry.data[CONF_IP_ADDRESS]
+    conn_type = entry.data.get(CONF_CONNECTION_TYPE, CONNECTION_LOCAL)
 
     async def async_update_data():
-        return await fetch_ptlevel_data(ip_address)
+        if conn_type == CONNECTION_TOKEN:
+            return await fetch_ptlevel_token_data(entry.data[CONF_DEVICE_ID], entry.data[CONF_API_TOKEN])
+        else:
+            return await fetch_ptlevel_local_data(entry.data[CONF_IP_ADDRESS])
 
     coordinator = DataUpdateCoordinator(
         hass,
