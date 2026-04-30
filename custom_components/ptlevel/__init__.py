@@ -49,24 +49,24 @@ async def fetch_ptlevel_token_data(device_id, api_token):
             raise UpdateFailed(f"Error communicating with PTLevel Cloud API: {err}")
 
 async def fetch_ptlevel_local_data(ip_address, api_token=None):
-    """Fetches local data, and optionally merges cloud Token API data if provided."""
-    sensors_url = f"http://{ip_address}/get_sensors"
-    config_url = f"http://{ip_address}/config"
+    """Fetches local data using the inclusive /get_data endpoint."""
+    data_url = f"http://{ip_address}/get_data"
     combined_data = {}
     
     async with aiohttp.ClientSession() as session:
         try:
-            async with session.get(sensors_url, timeout=10) as response:
+            async with session.get(data_url, timeout=10) as response:
                 text = await response.text()
-                sensors_json = json.loads(text)
-                if isinstance(sensors_json, list):
-                    for item in sensors_json: combined_data.update(item)
-                elif isinstance(sensors_json, dict):
-                    combined_data.update(sensors_json)
-            async with session.get(config_url, timeout=10) as response:
-                text = await response.text()
-                config_json = json.loads(text)
-                if isinstance(config_json, dict): combined_data.update(config_json)
+                json_data = json.loads(text)
+                
+                # Flatten the base dictionary (grabs fw_v, rst_rsn, is_static, etc.)
+                combined_data.update(json_data)
+                
+                # Flatten the local_s array (grabs the raw AD values, temp, and battery)
+                local_s = json_data.get("local_s", [])
+                if isinstance(local_s, list):
+                    for item in local_s:
+                        combined_data.update(item)
             
             bat_voltage = combined_data.get("2", combined_data.get("bat"))
             combined_data["bat"] = bat_voltage
@@ -97,7 +97,6 @@ async def fetch_ptlevel_local_data(ip_address, api_token=None):
             return combined_data
         except Exception as err:
             raise UpdateFailed(f"Error communicating with local PTLevel device: {err}")
-
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
@@ -194,9 +193,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if not api_token: api_token = None
             return await fetch_ptlevel_local_data(entry.data[CONF_IP_ADDRESS], api_token)
 
+    if conn_type == CONNECTION_LOCAL:
+        poll_interval = timedelta(seconds=30) # 30s for local
+    else:
+        poll_interval = timedelta(minutes=5) # 5m for Cloud/REST
+
     coordinator = DataUpdateCoordinator(
         hass, _LOGGER, name="ptlevel_sensor",
-        update_method=async_update_data, update_interval=timedelta(seconds=60),
+        update_method=async_update_data,
+        update_interval=poll_interval,
     )
 
     await coordinator.async_config_entry_first_refresh()
