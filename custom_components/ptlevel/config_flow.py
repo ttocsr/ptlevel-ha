@@ -6,7 +6,6 @@ from homeassistant.core import callback
 from homeassistant.components import dhcp
 from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers.device_registry import format_mac
-from homeassistant.helpers import selector
 
 from .const import (
     DOMAIN, CONF_IP_ADDRESS, CONF_TANK_SIZE, CONF_VOLUME_UNIT, 
@@ -76,24 +75,28 @@ class PTLevelConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, doma
         if default_ip is not None:
             schema[vol.Required(CONF_IP_ADDRESS, default=default_ip)] = str
         
-        tank_size = opts.get(CONF_TANK_SIZE, data.get(CONF_TANK_SIZE, 3300))
+        try:
+            tank_size = int(opts.get(CONF_TANK_SIZE, data.get(CONF_TANK_SIZE, 3300)))
+        except (ValueError, TypeError):
+            tank_size = 3300
+            
         vol_unit = opts.get(CONF_VOLUME_UNIT, data.get(CONF_VOLUME_UNIT, UNIT_IMP_GAL))
         
-        schema[vol.Optional(CONF_TANK_SIZE, default=int(tank_size))] = int
+        schema[vol.Optional(CONF_TANK_SIZE, default=tank_size)] = vol.Coerce(int)
         schema[vol.Required(CONF_VOLUME_UNIT, default=vol_unit)] = vol.In([UNIT_LITERS, UNIT_IMP_GAL, UNIT_US_GAL])
         
-        # Safely extract existing values for the suggested placeholders
+        # Switched to safely coerce into standard integers!
         zero_ad = opts.get(CONF_ZERO_AD, data.get(CONF_ZERO_AD))
-        full_ad = opts.get(CONF_FULL_AD, data.get(CONF_FULL_AD))
-
-        # Use HA Native NumberSelectors. This completely prevents UI crashes and float errors!
-        schema[vol.Optional(CONF_ZERO_AD, description={"suggested_value": zero_ad})] = selector.NumberSelector(
-            selector.NumberSelectorConfig(mode=selector.NumberSelectorMode.BOX, step="any")
-        )
+        try:
+            schema[vol.Optional(CONF_ZERO_AD, default=int(zero_ad))] = vol.Coerce(int)
+        except (ValueError, TypeError):
+            schema[vol.Optional(CONF_ZERO_AD)] = vol.Coerce(int)
             
-        schema[vol.Optional(CONF_FULL_AD, description={"suggested_value": full_ad})] = selector.NumberSelector(
-            selector.NumberSelectorConfig(mode=selector.NumberSelectorMode.BOX, step="any")
-        )
+        full_ad = opts.get(CONF_FULL_AD, data.get(CONF_FULL_AD))
+        try:
+            schema[vol.Optional(CONF_FULL_AD, default=int(full_ad))] = vol.Coerce(int)
+        except (ValueError, TypeError):
+            schema[vol.Optional(CONF_FULL_AD)] = vol.Coerce(int)
             
         return schema
 
@@ -129,27 +132,29 @@ class PTLevelOptionsFlowHandler(config_entries.OptionsFlow):
 
         opts = self.config_entry.options
         data = self.config_entry.data
+        schema_dict = {}
         
-        # We reuse the helper function so the Configuration menu is exactly the same as the setup menu
-        schema_dict = self.config_entry.domain._get_base_schema(self, None, opts, data) if hasattr(self.config_entry.domain, '_get_base_schema') else {}
-
-        # Actually, let's just build it safely right here to guarantee it works
-        tank_size = opts.get(CONF_TANK_SIZE, data.get(CONF_TANK_SIZE, 3300))
+        try:
+            tank_size = int(opts.get(CONF_TANK_SIZE, data.get(CONF_TANK_SIZE, 3300)))
+        except (ValueError, TypeError):
+            tank_size = 3300
+            
         vol_unit = opts.get(CONF_VOLUME_UNIT, data.get(CONF_VOLUME_UNIT, UNIT_IMP_GAL))
         
-        schema_dict = {
-            vol.Optional(CONF_TANK_SIZE, default=int(tank_size)): int,
-            vol.Required(CONF_VOLUME_UNIT, default=vol_unit): vol.In([UNIT_LITERS, UNIT_IMP_GAL, UNIT_US_GAL]),
-        }
+        schema_dict[vol.Optional(CONF_TANK_SIZE, default=tank_size)] = vol.Coerce(int)
+        schema_dict[vol.Required(CONF_VOLUME_UNIT, default=vol_unit)] = vol.In([UNIT_LITERS, UNIT_IMP_GAL, UNIT_US_GAL])
         
+        # Integer logic applied to the Configure gear menu too
         zero_ad = opts.get(CONF_ZERO_AD, data.get(CONF_ZERO_AD))
+        try:
+            schema_dict[vol.Optional(CONF_ZERO_AD, default=int(zero_ad))] = vol.Coerce(int)
+        except (ValueError, TypeError):
+            schema_dict[vol.Optional(CONF_ZERO_AD)] = vol.Coerce(int)
+            
         full_ad = opts.get(CONF_FULL_AD, data.get(CONF_FULL_AD))
-        
-        schema_dict[vol.Optional(CONF_ZERO_AD, description={"suggested_value": zero_ad})] = selector.NumberSelector(
-            selector.NumberSelectorConfig(mode=selector.NumberSelectorMode.BOX, step="any")
-        )
-        schema_dict[vol.Optional(CONF_FULL_AD, description={"suggested_value": full_ad})] = selector.NumberSelector(
-            selector.NumberSelectorConfig(mode=selector.NumberSelectorMode.BOX, step="any")
-        )
+        try:
+            schema_dict[vol.Optional(CONF_FULL_AD, default=int(full_ad))] = vol.Coerce(int)
+        except (ValueError, TypeError):
+            schema_dict[vol.Optional(CONF_FULL_AD)] = vol.Coerce(int)
 
         return self.async_show_form(step_id="init", data_schema=vol.Schema(schema_dict))
