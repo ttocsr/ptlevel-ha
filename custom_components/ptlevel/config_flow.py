@@ -16,6 +16,15 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+def safe_int(value, fallback=None):
+    """Safely converts any string, float, or blank value into a pure integer to prevent UI crashes."""
+    if value in (None, ""):
+        return fallback
+    try:
+        return int(float(value))
+    except (ValueError, TypeError):
+        return fallback
+
 class PTLevelConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMAIN):
     DOMAIN = DOMAIN
     VERSION = 1
@@ -63,6 +72,8 @@ class PTLevelConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, doma
 
     async def async_oauth_create_entry(self, data: dict) -> config_entries.ConfigFlowResult:
         data[CONF_CONNECTION_TYPE] = CONNECTION_REST
+        data[CONF_TANK_SIZE] = 3300
+        data[CONF_VOLUME_UNIT] = UNIT_IMP_GAL
         await self.async_set_unique_id("ptlevel_oauth_account")
         self._abort_if_unique_id_configured()
         return self.async_create_entry(title="ParemTech Account", data=data)
@@ -75,28 +86,24 @@ class PTLevelConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, doma
         if default_ip is not None:
             schema[vol.Required(CONF_IP_ADDRESS, default=default_ip)] = str
         
-        try:
-            tank_size = int(opts.get(CONF_TANK_SIZE, data.get(CONF_TANK_SIZE, 3300)))
-        except (ValueError, TypeError):
-            tank_size = 3300
-            
+        # Use the safe_int helper to guarantee perfect integers for the UI
+        tank_size = safe_int(opts.get(CONF_TANK_SIZE, data.get(CONF_TANK_SIZE)), 3300)
         vol_unit = opts.get(CONF_VOLUME_UNIT, data.get(CONF_VOLUME_UNIT, UNIT_IMP_GAL))
         
-        schema[vol.Optional(CONF_TANK_SIZE, default=tank_size)] = vol.Coerce(int)
+        schema[vol.Optional(CONF_TANK_SIZE, default=tank_size)] = int
         schema[vol.Required(CONF_VOLUME_UNIT, default=vol_unit)] = vol.In([UNIT_LITERS, UNIT_IMP_GAL, UNIT_US_GAL])
         
-        # Switched to safely coerce into standard integers!
-        zero_ad = opts.get(CONF_ZERO_AD, data.get(CONF_ZERO_AD))
-        try:
-            schema[vol.Optional(CONF_ZERO_AD, default=int(zero_ad))] = vol.Coerce(int)
-        except (ValueError, TypeError):
-            schema[vol.Optional(CONF_ZERO_AD)] = vol.Coerce(int)
+        zero_ad = safe_int(opts.get(CONF_ZERO_AD, data.get(CONF_ZERO_AD)))
+        if zero_ad is not None:
+            schema[vol.Optional(CONF_ZERO_AD, default=zero_ad)] = int
+        else:
+            schema[vol.Optional(CONF_ZERO_AD)] = int
             
-        full_ad = opts.get(CONF_FULL_AD, data.get(CONF_FULL_AD))
-        try:
-            schema[vol.Optional(CONF_FULL_AD, default=int(full_ad))] = vol.Coerce(int)
-        except (ValueError, TypeError):
-            schema[vol.Optional(CONF_FULL_AD)] = vol.Coerce(int)
+        full_ad = safe_int(opts.get(CONF_FULL_AD, data.get(CONF_FULL_AD)))
+        if full_ad is not None:
+            schema[vol.Optional(CONF_FULL_AD, default=full_ad)] = int
+        else:
+            schema[vol.Optional(CONF_FULL_AD)] = int
             
         return schema
 
@@ -122,9 +129,11 @@ class PTLevelConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, doma
         schema[vol.Required(CONF_API_TOKEN)] = str
         return self.async_show_form(step_id="cloud", data_schema=vol.Schema(schema))
 
+
 class PTLevelOptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
+        # THE FIX: We pass here! HA 2024.4+ sets self.config_entry automatically.
+        pass
 
     async def async_step_init(self, user_input=None):
         if user_input is not None:
@@ -134,27 +143,23 @@ class PTLevelOptionsFlowHandler(config_entries.OptionsFlow):
         data = self.config_entry.data
         schema_dict = {}
         
-        try:
-            tank_size = int(opts.get(CONF_TANK_SIZE, data.get(CONF_TANK_SIZE, 3300)))
-        except (ValueError, TypeError):
-            tank_size = 3300
-            
+        # Use the exact same safe_int logic to protect the Gear Menu!
+        tank_size = safe_int(opts.get(CONF_TANK_SIZE, data.get(CONF_TANK_SIZE)), 3300)
         vol_unit = opts.get(CONF_VOLUME_UNIT, data.get(CONF_VOLUME_UNIT, UNIT_IMP_GAL))
         
-        schema_dict[vol.Optional(CONF_TANK_SIZE, default=tank_size)] = vol.Coerce(int)
+        schema_dict[vol.Optional(CONF_TANK_SIZE, default=tank_size)] = int
         schema_dict[vol.Required(CONF_VOLUME_UNIT, default=vol_unit)] = vol.In([UNIT_LITERS, UNIT_IMP_GAL, UNIT_US_GAL])
         
-        # Integer logic applied to the Configure gear menu too
-        zero_ad = opts.get(CONF_ZERO_AD, data.get(CONF_ZERO_AD))
-        try:
-            schema_dict[vol.Optional(CONF_ZERO_AD, default=int(zero_ad))] = vol.Coerce(int)
-        except (ValueError, TypeError):
-            schema_dict[vol.Optional(CONF_ZERO_AD)] = vol.Coerce(int)
+        zero_ad = safe_int(opts.get(CONF_ZERO_AD, data.get(CONF_ZERO_AD)))
+        if zero_ad is not None:
+            schema_dict[vol.Optional(CONF_ZERO_AD, default=zero_ad)] = int
+        else:
+            schema_dict[vol.Optional(CONF_ZERO_AD)] = int
             
-        full_ad = opts.get(CONF_FULL_AD, data.get(CONF_FULL_AD))
-        try:
-            schema_dict[vol.Optional(CONF_FULL_AD, default=int(full_ad))] = vol.Coerce(int)
-        except (ValueError, TypeError):
-            schema_dict[vol.Optional(CONF_FULL_AD)] = vol.Coerce(int)
+        full_ad = safe_int(opts.get(CONF_FULL_AD, data.get(CONF_FULL_AD)))
+        if full_ad is not None:
+            schema_dict[vol.Optional(CONF_FULL_AD, default=full_ad)] = int
+        else:
+            schema_dict[vol.Optional(CONF_FULL_AD)] = int
 
         return self.async_show_form(step_id="init", data_schema=vol.Schema(schema_dict))

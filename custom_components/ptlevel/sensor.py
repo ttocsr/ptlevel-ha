@@ -51,7 +51,7 @@ def create_sensors(coordinator, entry, conn_type, device_id):
 class PTLevelPercentageSensor(PTLevelBaseEntity, SensorEntity):
     _attr_name = "Level"
     _attr_native_unit_of_measurement = PERCENTAGE
-    _attr_device_class = SensorDeviceClass.WATER
+    # Device class removed so HA stops treating it like a utility meter
     _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(self, coordinator, entry, device_id=None):
@@ -62,13 +62,11 @@ class PTLevelPercentageSensor(PTLevelBaseEntity, SensorEntity):
     def native_value(self):
         data = self.target_data
         current_ad = data.get('1')
-
-        # 1. Look for user's custom options first, fallback to device's hardware zero 'z'
+        
         opts = self.entry.options
         zero_ad = opts.get(CONF_ZERO_AD, self.entry.data.get(CONF_ZERO_AD, data.get('z')))
         full_ad = opts.get(CONF_FULL_AD, self.entry.data.get(CONF_FULL_AD))
 
-        # 2. If we have all the pieces, calculate locally! (Overrides Cloud)
         if current_ad is not None and zero_ad is not None and full_ad is not None:
             try:
                 c = float(current_ad)
@@ -79,16 +77,15 @@ class PTLevelPercentageSensor(PTLevelBaseEntity, SensorEntity):
                     return round(max(0, min(100, pct)), 1)
             except ValueError:
                 pass
-
-        # 3. Fallback to Cloud API percentage if we can't do local math
+                
         if 'cloud_percent' in data and data['cloud_percent'] is not None:
             return data['cloud_percent']
-
+            
         return None
 
 class PTLevelVolumeSensor(PTLevelBaseEntity, SensorEntity):
     _attr_name = "Volume"
-    _attr_device_class = SensorDeviceClass.WATER
+    _attr_device_class = SensorDeviceClass.VOLUME # <--- Changed to VOLUME
     _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(self, coordinator, entry, device_id=None):
@@ -97,10 +94,9 @@ class PTLevelVolumeSensor(PTLevelBaseEntity, SensorEntity):
 
     @property
     def native_unit_of_measurement(self):
-        # Check the Options menu first, fallback to the initial setup Data
         opts = self.entry.options
         unit = opts.get(CONF_VOLUME_UNIT, self.entry.data.get(CONF_VOLUME_UNIT))
-
+        
         if unit == UNIT_LITERS:
             return UnitOfVolume.LITERS
         return UnitOfVolume.GALLONS
@@ -110,11 +106,11 @@ class PTLevelVolumeSensor(PTLevelBaseEntity, SensorEntity):
         opts = self.entry.options
         tank_size = opts.get(CONF_TANK_SIZE, self.entry.data.get(CONF_TANK_SIZE, 0))
         if not tank_size: return None
-
+        
         data = self.target_data
         current_ad = data.get('1')
         pct = None
-
+        
         zero_ad = opts.get(CONF_ZERO_AD, self.entry.data.get(CONF_ZERO_AD, data.get('z')))
         full_ad = opts.get(CONF_FULL_AD, self.entry.data.get(CONF_FULL_AD))
 
@@ -128,10 +124,10 @@ class PTLevelVolumeSensor(PTLevelBaseEntity, SensorEntity):
                     pct = max(0, min(100, pct))
             except ValueError:
                 pass
-
+                
         if pct is None and 'cloud_percent' in data and data['cloud_percent'] is not None:
             pct = data['cloud_percent']
-
+            
         if pct is not None:
             return round((float(pct) / 100) * float(tank_size), 1)
         return None
