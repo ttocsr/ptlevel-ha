@@ -74,11 +74,10 @@ class PTLevelConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, doma
         if default_ip is not None:
             schema[vol.Required(CONF_IP_ADDRESS, default=default_ip)] = str
         
-        # Tank size, Units, Empty, and Full are all cleanly added here!
         schema[vol.Optional(CONF_TANK_SIZE, default=3300)] = int
         schema[vol.Required(CONF_VOLUME_UNIT, default=UNIT_IMP_GAL)] = vol.In([UNIT_LITERS, UNIT_IMP_GAL, UNIT_US_GAL])
-        schema[vol.Optional(CONF_ZERO_AD)] = vol.Coerce(float)
-        schema[vol.Optional(CONF_FULL_AD)] = vol.Coerce(float)
+        schema[vol.Optional(CONF_ZERO_AD)] = float # Changed from vol.Coerce
+        schema[vol.Optional(CONF_FULL_AD)] = float # Changed from vol.Coerce
         
         return schema
 
@@ -111,34 +110,42 @@ class PTLevelOptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input=None):
         if user_input is not None:
-            # Save the new values to the options dictionary
             return self.async_create_entry(title="", data=user_input)
 
         opts = self.config_entry.options
         data = self.config_entry.data
         
-        # Grab existing data, or fallback to sensible defaults
-        tank_size = opts.get(CONF_TANK_SIZE, data.get(CONF_TANK_SIZE, 3300))
+        # Safely extract values
+        try:
+            tank_size = int(opts.get(CONF_TANK_SIZE, data.get(CONF_TANK_SIZE, 3300)))
+        except (ValueError, TypeError):
+            tank_size = 3300
+            
         vol_unit = opts.get(CONF_VOLUME_UNIT, data.get(CONF_VOLUME_UNIT, UNIT_IMP_GAL))
 
-        # Dynamically build the schema so Home Assistant doesn't crash on "None" defaults
         schema_dict = {
             vol.Optional(CONF_TANK_SIZE, default=tank_size): int,
             vol.Required(CONF_VOLUME_UNIT, default=vol_unit): vol.In([UNIT_LITERS, UNIT_IMP_GAL, UNIT_US_GAL]),
         }
 
-        # Safely parse Empty AD
+        # Safely inject the float values for Empty
         zero_ad = opts.get(CONF_ZERO_AD, data.get(CONF_ZERO_AD))
         if zero_ad not in (None, ""):
-            schema_dict[vol.Optional(CONF_ZERO_AD, default=float(zero_ad))] = vol.Coerce(float)
+            try:
+                schema_dict[vol.Optional(CONF_ZERO_AD, default=float(zero_ad))] = float
+            except (ValueError, TypeError):
+                schema_dict[vol.Optional(CONF_ZERO_AD)] = float
         else:
-            schema_dict[vol.Optional(CONF_ZERO_AD)] = vol.Coerce(float)
+            schema_dict[vol.Optional(CONF_ZERO_AD)] = float
 
-        # Safely parse Full AD
+        # Safely inject the float values for Full
         full_ad = opts.get(CONF_FULL_AD, data.get(CONF_FULL_AD))
         if full_ad not in (None, ""):
-            schema_dict[vol.Optional(CONF_FULL_AD, default=float(full_ad))] = vol.Coerce(float)
+            try:
+                schema_dict[vol.Optional(CONF_FULL_AD, default=float(full_ad))] = float
+            except (ValueError, TypeError):
+                schema_dict[vol.Optional(CONF_FULL_AD)] = float
         else:
-            schema_dict[vol.Optional(CONF_FULL_AD)] = vol.Coerce(float)
+            schema_dict[vol.Optional(CONF_FULL_AD)] = float
 
         return self.async_show_form(step_id="init", data_schema=vol.Schema(schema_dict))

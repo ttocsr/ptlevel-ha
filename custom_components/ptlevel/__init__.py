@@ -20,7 +20,6 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor", "button"]
 
 async def fetch_ptlevel_token_data(device_id, api_token):
-    """Fetches data from the standard Token API."""
     url = f"https://api.ptdevices.com/token/v1/device/{device_id}?api_token={api_token}"
     async with aiohttp.ClientSession() as session:
         try:
@@ -49,7 +48,6 @@ async def fetch_ptlevel_token_data(device_id, api_token):
             raise UpdateFailed(f"Error communicating with PTLevel Cloud API: {err}")
 
 async def fetch_ptlevel_local_data(ip_address, api_token=None):
-    """Fetches local data using the inclusive /get_data endpoint."""
     data_url = f"http://{ip_address}/get_data"
     combined_data = {}
     
@@ -58,11 +56,8 @@ async def fetch_ptlevel_local_data(ip_address, api_token=None):
             async with session.get(data_url, timeout=10) as response:
                 text = await response.text()
                 json_data = json.loads(text)
-                
-                # Flatten the base dictionary (grabs fw_v, rst_rsn, is_static, etc.)
                 combined_data.update(json_data)
                 
-                # Flatten the local_s array (grabs the raw AD values, temp, and battery)
                 local_s = json_data.get("local_s", [])
                 if isinstance(local_s, list):
                     for item in local_s:
@@ -102,22 +97,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     conn_type = entry.data.get(CONF_CONNECTION_TYPE, CONNECTION_LOCAL)
 
-    # Setup OAuth2 Session if REST API
     session = None
     if conn_type == CONNECTION_REST:
         implementation = await config_entry_oauth2_flow.async_get_config_entry_implementation(hass, entry)
         session = config_entry_oauth2_flow.OAuth2Session(hass, entry, implementation)
 
     async def handle_rest_calibrate(call):
-        """Handle the custom REST API calibration service."""
         device_id = call.data.get("device_id")
         tank_height = float(call.data.get("tank_height"))
         water_height = float(call.data.get("water_height"))
-        
-        # Perform the user's calibration math
         pct = int(round((water_height / tank_height) * 100))
         
-        # Execute the REST API command
         if session: 
             await session.async_ensure_token_valid()
             access_token = session.token["access_token"]
@@ -128,7 +118,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "Accept": "*/*"
             }
             payload = {"calibration_value": pct}
-            
             url = f"https://ptdevices.com/v1/device/{device_id}/calibrate"
             try:
                 async with client.post(url, headers=headers, json=payload, timeout=10) as resp:
@@ -140,7 +129,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             except Exception as e:
                 _LOGGER.error(f"Error sending calibration to PTLevel: {e}")
 
-    # Register the service for automation usage
     if conn_type == CONNECTION_REST:
         hass.services.async_register(
             DOMAIN, 
@@ -157,7 +145,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if conn_type == CONNECTION_REST:
             await session.async_ensure_token_valid()
             access_token = session.token["access_token"]
-            
             client = async_get_clientsession(hass)
             headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
             
@@ -170,7 +157,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     dev_id = str(d.get("device_id"))
                     dd = d.get("device_data", {})
                     wifi_raw = str(d.get("wifi_signal", ""))
-                    
                     parsed_devices[dev_id] = {
                         "id": dev_id,
                         "mac": dev_id,
@@ -194,28 +180,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             return await fetch_ptlevel_local_data(entry.data[CONF_IP_ADDRESS], api_token)
 
     if conn_type == CONNECTION_LOCAL:
-        poll_interval = timedelta(seconds=30) # 30s for local
+        poll_interval = timedelta(seconds=60)
     else:
-        poll_interval = timedelta(minutes=5) # 5m for Cloud/REST
+        poll_interval = timedelta(minutes=10)
 
     coordinator = DataUpdateCoordinator(
         hass, _LOGGER, name="ptlevel_sensor",
-        update_method=async_update_data,
-        update_interval=poll_interval,
+        update_method=async_update_data, update_interval=poll_interval,
     )
 
     await coordinator.async_config_entry_first_refresh()
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # THIS IS THE CRITICAL LINE THAT FORCES THE REFRESH ON OPTION CHANGE!
     entry.async_on_unload(entry.add_update_listener(update_listener))
+
     return True
+
+async def update_listener(hass: HomeAssistant, entry: ConfigEntry):
+    """Reload the integration when options are updated."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok: hass.data[DOMAIN].pop(entry.entry_id)
     return unload_ok
-
-async def update_listener(hass: HomeAssistant, entry: ConfigEntry):
-    """Reload the integration if the user changes the Options menu."""
-    await hass.config_entries.async_reload(entry.entry_id)
