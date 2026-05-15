@@ -59,18 +59,30 @@ class PTLevelPercentageSensor(PTLevelBaseEntity, SensorEntity):
     @property
     def native_value(self):
         data = self.target_data
-        if 'cloud_percent' in data:
+        current_ad = data.get('1')
+
+        # 1. Look for user's custom options first, fallback to device's hardware zero 'z'
+        opts = self.entry.options
+        zero_ad = opts.get(CONF_ZERO_AD, self.entry.data.get(CONF_ZERO_AD, data.get('z')))
+        full_ad = opts.get(CONF_FULL_AD, self.entry.data.get(CONF_FULL_AD))
+
+        # 2. If we have all the pieces, calculate locally! (Overrides Cloud)
+        if current_ad is not None and zero_ad is not None and full_ad is not None:
+            try:
+                c = float(current_ad)
+                z = float(zero_ad)
+                f = float(full_ad)
+                if f != z:
+                    pct = ((c - z) / (f - z)) * 100
+                    return round(max(0, min(100, pct)), 1)
+            except ValueError:
+                pass
+
+        # 3. Fallback to Cloud API percentage if we can't do local math
+        if 'cloud_percent' in data and data['cloud_percent'] is not None:
             return data['cloud_percent']
 
-        current_ad = data.get('1')
-        zero_ad = data.get('z')
-        full_ad = self.entry.data.get(CONF_FULL_AD)
-
-        if current_ad is None or zero_ad is None or not full_ad: return None
-        if full_ad == zero_ad: return 0
-
-        pct = ((float(current_ad) - float(zero_ad)) / (float(full_ad) - float(zero_ad))) * 100
-        return round(max(0, min(100, pct)), 1)
+        return None
 
 class PTLevelVolumeSensor(PTLevelBaseEntity, SensorEntity):
     _attr_name = "Volume"
@@ -83,29 +95,40 @@ class PTLevelVolumeSensor(PTLevelBaseEntity, SensorEntity):
 
     @property
     def native_unit_of_measurement(self):
-        unit = self.entry.data.get(CONF_VOLUME_UNIT)
+        # Check the Options menu first, fallback to the initial setup Data
+        opts = self.entry.options
+        unit = opts.get(CONF_VOLUME_UNIT, self.entry.data.get(CONF_VOLUME_UNIT))
+
         if unit == UNIT_LITERS:
             return UnitOfVolume.LITERS
         return UnitOfVolume.GALLONS
 
     @property
     def native_value(self):
-        tank_size = self.entry.data.get(CONF_TANK_SIZE)
-        if not tank_size: return None # Fails gracefully if user left it blank
+        opts = self.entry.options
+        tank_size = opts.get(CONF_TANK_SIZE, self.entry.data.get(CONF_TANK_SIZE, 0))
+        if not tank_size: return None
 
         data = self.target_data
+        current_ad = data.get('1')
         pct = None
 
-        if 'cloud_percent' in data:
-            pct = data['cloud_percent']
-        else:
-            current_ad = data.get('1')
-            zero_ad = data.get('z')
-            full_ad = self.entry.data.get(CONF_FULL_AD)
-            if current_ad is not None and zero_ad is not None and full_ad:
-                if full_ad != zero_ad:
-                    pct = ((float(current_ad) - float(zero_ad)) / (float(full_ad) - float(zero_ad))) * 100
+        zero_ad = opts.get(CONF_ZERO_AD, self.entry.data.get(CONF_ZERO_AD, data.get('z')))
+        full_ad = opts.get(CONF_FULL_AD, self.entry.data.get(CONF_FULL_AD))
+
+        if current_ad is not None and zero_ad is not None and full_ad is not None:
+            try:
+                c = float(current_ad)
+                z = float(zero_ad)
+                f = float(full_ad)
+                if f != z:
+                    pct = ((c - z) / (f - z)) * 100
                     pct = max(0, min(100, pct))
+            except ValueError:
+                pass
+
+        if pct is None and 'cloud_percent' in data and data['cloud_percent'] is not None:
+            pct = data['cloud_percent']
 
         if pct is not None:
             return round((float(pct) / 100) * float(tank_size), 1)
