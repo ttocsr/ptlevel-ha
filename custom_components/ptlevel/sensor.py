@@ -85,7 +85,7 @@ class PTLevelPercentageSensor(PTLevelBaseEntity, SensorEntity):
 
 class PTLevelVolumeSensor(PTLevelBaseEntity, SensorEntity):
     _attr_name = "Volume"
-    _attr_device_class = SensorDeviceClass.VOLUME # <--- Changed to VOLUME
+    _attr_device_class = SensorDeviceClass.VOLUME_STORAGE # <--- Changed to VOLUME_STORAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(self, coordinator, entry, device_id=None):
@@ -185,7 +185,7 @@ class PTLevelZeroSensor(PTLevelBaseEntity, SensorEntity):
 class PTLevelBatterySensor(PTLevelBaseEntity, SensorEntity):
     _attr_name = "Battery Voltage"
     _attr_native_unit_of_measurement = UnitOfElectricPotential.VOLT
-    _attr_device_class = SensorDeviceClass.BATTERY
+    _attr_device_class = SensorDeviceClass.VOLTAGE # <--- Changed to VOLTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(self, coordinator, entry, device_id=None):
