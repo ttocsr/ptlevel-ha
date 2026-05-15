@@ -30,7 +30,6 @@ class PTLevelConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, doma
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
-        """Tell Home Assistant we support a configuration options menu!"""
         return PTLevelOptionsFlowHandler(config_entry)
 
     async def async_step_dhcp(self, discovery_info: dhcp.DhcpServiceInfo) -> config_entries.ConfigFlowResult:
@@ -68,17 +67,33 @@ class PTLevelConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, doma
         self._abort_if_unique_id_configured()
         return self.async_create_entry(title="ParemTech Account", data=data)
 
-    def _get_base_schema(self, default_ip=""):
-        """Helper to generate standard schema fields for initial setup."""
+    def _get_base_schema(self, default_ip="", opts=None, data=None):
+        if opts is None: opts = {}
+        if data is None: data = {}
+        
         schema = {}
         if default_ip is not None:
             schema[vol.Required(CONF_IP_ADDRESS, default=default_ip)] = str
         
-        schema[vol.Optional(CONF_TANK_SIZE, default=3300)] = int
-        schema[vol.Required(CONF_VOLUME_UNIT, default=UNIT_IMP_GAL)] = vol.In([UNIT_LITERS, UNIT_IMP_GAL, UNIT_US_GAL])
-        schema[vol.Optional(CONF_ZERO_AD)] = float # Changed from vol.Coerce
-        schema[vol.Optional(CONF_FULL_AD)] = float # Changed from vol.Coerce
+        tank_size = opts.get(CONF_TANK_SIZE, data.get(CONF_TANK_SIZE, 3300))
+        vol_unit = opts.get(CONF_VOLUME_UNIT, data.get(CONF_VOLUME_UNIT, UNIT_IMP_GAL))
         
+        schema[vol.Optional(CONF_TANK_SIZE, default=int(tank_size))] = vol.Coerce(int)
+        schema[vol.Required(CONF_VOLUME_UNIT, default=vol_unit)] = vol.In([UNIT_LITERS, UNIT_IMP_GAL, UNIT_US_GAL])
+        
+        # Safely coerce integers into floats without UI validation errors!
+        zero_ad = opts.get(CONF_ZERO_AD, data.get(CONF_ZERO_AD))
+        if zero_ad not in (None, ""):
+            schema[vol.Optional(CONF_ZERO_AD, default=float(zero_ad))] = vol.Coerce(float)
+        else:
+            schema[vol.Optional(CONF_ZERO_AD)] = vol.Coerce(float)
+            
+        full_ad = opts.get(CONF_FULL_AD, data.get(CONF_FULL_AD))
+        if full_ad not in (None, ""):
+            schema[vol.Optional(CONF_FULL_AD, default=float(full_ad))] = vol.Coerce(float)
+        else:
+            schema[vol.Optional(CONF_FULL_AD)] = vol.Coerce(float)
+            
         return schema
 
     async def async_step_local(self, user_input=None) -> config_entries.ConfigFlowResult:
@@ -103,8 +118,8 @@ class PTLevelConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, doma
         schema[vol.Required(CONF_API_TOKEN)] = str
         return self.async_show_form(step_id="cloud", data_schema=vol.Schema(schema))
 
+
 class PTLevelOptionsFlowHandler(config_entries.OptionsFlow):
-    """The menu that appears when you click 'Configure' on the integration."""
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self.config_entry = config_entry
 
@@ -112,40 +127,28 @@ class PTLevelOptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
+        # Build schema using the same helper logic
         opts = self.config_entry.options
         data = self.config_entry.data
         
-        # Safely extract values
-        try:
-            tank_size = int(opts.get(CONF_TANK_SIZE, data.get(CONF_TANK_SIZE, 3300)))
-        except (ValueError, TypeError):
-            tank_size = 3300
-            
+        schema_dict = {}
+        
+        tank_size = opts.get(CONF_TANK_SIZE, data.get(CONF_TANK_SIZE, 3300))
         vol_unit = opts.get(CONF_VOLUME_UNIT, data.get(CONF_VOLUME_UNIT, UNIT_IMP_GAL))
-
-        schema_dict = {
-            vol.Optional(CONF_TANK_SIZE, default=tank_size): int,
-            vol.Required(CONF_VOLUME_UNIT, default=vol_unit): vol.In([UNIT_LITERS, UNIT_IMP_GAL, UNIT_US_GAL]),
-        }
-
-        # Safely inject the float values for Empty
+        
+        schema_dict[vol.Optional(CONF_TANK_SIZE, default=int(tank_size))] = vol.Coerce(int)
+        schema_dict[vol.Required(CONF_VOLUME_UNIT, default=vol_unit)] = vol.In([UNIT_LITERS, UNIT_IMP_GAL, UNIT_US_GAL])
+        
         zero_ad = opts.get(CONF_ZERO_AD, data.get(CONF_ZERO_AD))
         if zero_ad not in (None, ""):
-            try:
-                schema_dict[vol.Optional(CONF_ZERO_AD, default=float(zero_ad))] = float
-            except (ValueError, TypeError):
-                schema_dict[vol.Optional(CONF_ZERO_AD)] = float
+            schema_dict[vol.Optional(CONF_ZERO_AD, default=float(zero_ad))] = vol.Coerce(float)
         else:
-            schema_dict[vol.Optional(CONF_ZERO_AD)] = float
-
-        # Safely inject the float values for Full
+            schema_dict[vol.Optional(CONF_ZERO_AD)] = vol.Coerce(float)
+            
         full_ad = opts.get(CONF_FULL_AD, data.get(CONF_FULL_AD))
         if full_ad not in (None, ""):
-            try:
-                schema_dict[vol.Optional(CONF_FULL_AD, default=float(full_ad))] = float
-            except (ValueError, TypeError):
-                schema_dict[vol.Optional(CONF_FULL_AD)] = float
+            schema_dict[vol.Optional(CONF_FULL_AD, default=float(full_ad))] = vol.Coerce(float)
         else:
-            schema_dict[vol.Optional(CONF_FULL_AD)] = float
+            schema_dict[vol.Optional(CONF_FULL_AD)] = vol.Coerce(float)
 
         return self.async_show_form(step_id="init", data_schema=vol.Schema(schema_dict))
