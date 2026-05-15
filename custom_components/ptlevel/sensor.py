@@ -1,8 +1,8 @@
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
 from homeassistant.const import PERCENTAGE, UnitOfVolume, UnitOfElectricPotential, UnitOfTemperature, EntityCategory
 from .const import (
-    DOMAIN, CONF_TANK_SIZE, CONF_VOLUME_UNIT, CONF_FULL_AD,
-    CONF_CONNECTION_TYPE, CONNECTION_LOCAL,
+    DOMAIN, CONF_TANK_SIZE, CONF_VOLUME_UNIT, CONF_FULL_AD, CONF_ZERO_AD, 
+    CONF_CONNECTION_TYPE, CONNECTION_LOCAL, 
     UNIT_LITERS, UNIT_IMP_GAL, UNIT_US_GAL
 )
 from .entity import PTLevelBaseEntity

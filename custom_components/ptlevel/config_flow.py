@@ -6,6 +6,7 @@ from homeassistant.core import callback
 from homeassistant.components import dhcp
 from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers.device_registry import format_mac
+from homeassistant.helpers import selector
 
 from .const import (
     DOMAIN, CONF_IP_ADDRESS, CONF_TANK_SIZE, CONF_VOLUME_UNIT, 
@@ -78,21 +79,21 @@ class PTLevelConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, doma
         tank_size = opts.get(CONF_TANK_SIZE, data.get(CONF_TANK_SIZE, 3300))
         vol_unit = opts.get(CONF_VOLUME_UNIT, data.get(CONF_VOLUME_UNIT, UNIT_IMP_GAL))
         
-        schema[vol.Optional(CONF_TANK_SIZE, default=int(tank_size))] = vol.Coerce(int)
+        schema[vol.Optional(CONF_TANK_SIZE, default=int(tank_size))] = int
         schema[vol.Required(CONF_VOLUME_UNIT, default=vol_unit)] = vol.In([UNIT_LITERS, UNIT_IMP_GAL, UNIT_US_GAL])
         
-        # Safely coerce integers into floats without UI validation errors!
+        # Safely extract existing values for the suggested placeholders
         zero_ad = opts.get(CONF_ZERO_AD, data.get(CONF_ZERO_AD))
-        if zero_ad not in (None, ""):
-            schema[vol.Optional(CONF_ZERO_AD, default=float(zero_ad))] = vol.Coerce(float)
-        else:
-            schema[vol.Optional(CONF_ZERO_AD)] = vol.Coerce(float)
-            
         full_ad = opts.get(CONF_FULL_AD, data.get(CONF_FULL_AD))
-        if full_ad not in (None, ""):
-            schema[vol.Optional(CONF_FULL_AD, default=float(full_ad))] = vol.Coerce(float)
-        else:
-            schema[vol.Optional(CONF_FULL_AD)] = vol.Coerce(float)
+
+        # Use HA Native NumberSelectors. This completely prevents UI crashes and float errors!
+        schema[vol.Optional(CONF_ZERO_AD, description={"suggested_value": zero_ad})] = selector.NumberSelector(
+            selector.NumberSelectorConfig(mode=selector.NumberSelectorMode.BOX, step="any")
+        )
+            
+        schema[vol.Optional(CONF_FULL_AD, description={"suggested_value": full_ad})] = selector.NumberSelector(
+            selector.NumberSelectorConfig(mode=selector.NumberSelectorMode.BOX, step="any")
+        )
             
         return schema
 
@@ -118,7 +119,6 @@ class PTLevelConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, doma
         schema[vol.Required(CONF_API_TOKEN)] = str
         return self.async_show_form(step_id="cloud", data_schema=vol.Schema(schema))
 
-
 class PTLevelOptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self.config_entry = config_entry
@@ -127,28 +127,29 @@ class PTLevelOptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        # Build schema using the same helper logic
         opts = self.config_entry.options
         data = self.config_entry.data
         
-        schema_dict = {}
-        
+        # We reuse the helper function so the Configuration menu is exactly the same as the setup menu
+        schema_dict = self.config_entry.domain._get_base_schema(self, None, opts, data) if hasattr(self.config_entry.domain, '_get_base_schema') else {}
+
+        # Actually, let's just build it safely right here to guarantee it works
         tank_size = opts.get(CONF_TANK_SIZE, data.get(CONF_TANK_SIZE, 3300))
         vol_unit = opts.get(CONF_VOLUME_UNIT, data.get(CONF_VOLUME_UNIT, UNIT_IMP_GAL))
         
-        schema_dict[vol.Optional(CONF_TANK_SIZE, default=int(tank_size))] = vol.Coerce(int)
-        schema_dict[vol.Required(CONF_VOLUME_UNIT, default=vol_unit)] = vol.In([UNIT_LITERS, UNIT_IMP_GAL, UNIT_US_GAL])
+        schema_dict = {
+            vol.Optional(CONF_TANK_SIZE, default=int(tank_size)): int,
+            vol.Required(CONF_VOLUME_UNIT, default=vol_unit): vol.In([UNIT_LITERS, UNIT_IMP_GAL, UNIT_US_GAL]),
+        }
         
         zero_ad = opts.get(CONF_ZERO_AD, data.get(CONF_ZERO_AD))
-        if zero_ad not in (None, ""):
-            schema_dict[vol.Optional(CONF_ZERO_AD, default=float(zero_ad))] = vol.Coerce(float)
-        else:
-            schema_dict[vol.Optional(CONF_ZERO_AD)] = vol.Coerce(float)
-            
         full_ad = opts.get(CONF_FULL_AD, data.get(CONF_FULL_AD))
-        if full_ad not in (None, ""):
-            schema_dict[vol.Optional(CONF_FULL_AD, default=float(full_ad))] = vol.Coerce(float)
-        else:
-            schema_dict[vol.Optional(CONF_FULL_AD)] = vol.Coerce(float)
+        
+        schema_dict[vol.Optional(CONF_ZERO_AD, description={"suggested_value": zero_ad})] = selector.NumberSelector(
+            selector.NumberSelectorConfig(mode=selector.NumberSelectorMode.BOX, step="any")
+        )
+        schema_dict[vol.Optional(CONF_FULL_AD, description={"suggested_value": full_ad})] = selector.NumberSelector(
+            selector.NumberSelectorConfig(mode=selector.NumberSelectorMode.BOX, step="any")
+        )
 
         return self.async_show_form(step_id="init", data_schema=vol.Schema(schema_dict))
