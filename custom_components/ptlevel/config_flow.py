@@ -68,19 +68,28 @@ class PTLevelConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, doma
         self._abort_if_unique_id_configured()
         return self.async_create_entry(title="ParemTech Account", data=data)
 
+    def _get_base_schema(self, default_ip=""):
+        """Helper to generate standard schema fields for initial setup."""
+        schema = {}
+        if default_ip is not None:
+            schema[vol.Required(CONF_IP_ADDRESS, default=default_ip)] = str
+        
+        # Tank size, Units, Empty, and Full are all cleanly added here!
+        schema[vol.Optional(CONF_TANK_SIZE, default=3300)] = int
+        schema[vol.Required(CONF_VOLUME_UNIT, default=UNIT_IMP_GAL)] = vol.In([UNIT_LITERS, UNIT_IMP_GAL, UNIT_US_GAL])
+        schema[vol.Optional(CONF_ZERO_AD)] = vol.Coerce(float)
+        schema[vol.Optional(CONF_FULL_AD)] = vol.Coerce(float)
+        
+        return schema
+
     async def async_step_local(self, user_input=None) -> config_entries.ConfigFlowResult:
         if user_input is not None:
             user_input[CONF_CONNECTION_TYPE] = CONNECTION_LOCAL
             return self.async_create_entry(title=f"PTLevel ({user_input[CONF_IP_ADDRESS]})", data=user_input)
 
-        default_ip = self.discovered_ip if self.discovered_ip else ""
-        return self.async_show_form(
-            step_id="local", 
-            data_schema=vol.Schema({
-                vol.Required(CONF_IP_ADDRESS, default=default_ip): str,
-                vol.Optional(CONF_API_TOKEN, default=""): str,
-            })
-        )
+        schema = self._get_base_schema(self.discovered_ip if self.discovered_ip else "")
+        schema[vol.Optional(CONF_API_TOKEN, default="")] = str
+        return self.async_show_form(step_id="local", data_schema=vol.Schema(schema))
 
     async def async_step_cloud(self, user_input=None) -> config_entries.ConfigFlowResult:
         if user_input is not None:
@@ -90,13 +99,10 @@ class PTLevelConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, doma
             self._abort_if_unique_id_configured()
             return self.async_create_entry(title=f"PTLevel Remote ({user_input[CONF_DEVICE_ID]})", data=user_input)
 
-        return self.async_show_form(
-            step_id="cloud", 
-            data_schema=vol.Schema({
-                vol.Required(CONF_DEVICE_ID): str,
-                vol.Required(CONF_API_TOKEN): str,
-            })
-        )
+        schema = self._get_base_schema(None)
+        schema[vol.Required(CONF_DEVICE_ID)] = str
+        schema[vol.Required(CONF_API_TOKEN)] = str
+        return self.async_show_form(step_id="cloud", data_schema=vol.Schema(schema))
 
 class PTLevelOptionsFlowHandler(config_entries.OptionsFlow):
     """The menu that appears when you click 'Configure' on the integration."""
@@ -111,27 +117,28 @@ class PTLevelOptionsFlowHandler(config_entries.OptionsFlow):
         opts = self.config_entry.options
         data = self.config_entry.data
         
+        # Grab existing data, or fallback to sensible defaults
         tank_size = opts.get(CONF_TANK_SIZE, data.get(CONF_TANK_SIZE, 3300))
         vol_unit = opts.get(CONF_VOLUME_UNIT, data.get(CONF_VOLUME_UNIT, UNIT_IMP_GAL))
 
         # Dynamically build the schema so Home Assistant doesn't crash on "None" defaults
         schema_dict = {
-            vol.Required(CONF_TANK_SIZE, default=tank_size): int,
+            vol.Optional(CONF_TANK_SIZE, default=tank_size): int,
             vol.Required(CONF_VOLUME_UNIT, default=vol_unit): vol.In([UNIT_LITERS, UNIT_IMP_GAL, UNIT_US_GAL]),
         }
 
-        # Safely add the Zero/Empty AD text box
+        # Safely parse Empty AD
         zero_ad = opts.get(CONF_ZERO_AD, data.get(CONF_ZERO_AD))
-        if zero_ad is not None:
-            schema_dict[vol.Optional(CONF_ZERO_AD, default=float(zero_ad))] = float
+        if zero_ad not in (None, ""):
+            schema_dict[vol.Optional(CONF_ZERO_AD, default=float(zero_ad))] = vol.Coerce(float)
         else:
-            schema_dict[vol.Optional(CONF_ZERO_AD)] = float
+            schema_dict[vol.Optional(CONF_ZERO_AD)] = vol.Coerce(float)
 
-        # Safely add the Full AD text box
+        # Safely parse Full AD
         full_ad = opts.get(CONF_FULL_AD, data.get(CONF_FULL_AD))
-        if full_ad is not None:
-            schema_dict[vol.Optional(CONF_FULL_AD, default=float(full_ad))] = float
+        if full_ad not in (None, ""):
+            schema_dict[vol.Optional(CONF_FULL_AD, default=float(full_ad))] = vol.Coerce(float)
         else:
-            schema_dict[vol.Optional(CONF_FULL_AD)] = float
+            schema_dict[vol.Optional(CONF_FULL_AD)] = vol.Coerce(float)
 
         return self.async_show_form(step_id="init", data_schema=vol.Schema(schema_dict))
