@@ -42,6 +42,8 @@ def create_sensors(coordinator, entry, conn_type, device_id):
         sensors.append(PTLevelRawSensor(coordinator, entry, device_id))
         sensors.append(PTLevelZeroSensor(coordinator, entry, device_id))
         sensors.append(PTLevelResetReasonSensor(coordinator, entry, device_id))
+        sensors.append(PTLevelConfiguredEmptySensor(coordinator, entry, device_id))
+        sensors.append(PTLevelConfiguredFullSensor(coordinator, entry, device_id))
     return sensors
 
 # --- VOLUME & PERCENTAGE SENSORS ---
@@ -280,3 +282,33 @@ class PTLevelResetReasonSensor(PTLevelBaseEntity, SensorEntity):
     @property
     def native_value(self):
         return self.target_data.get('rst_rsn')
+
+class PTLevelConfiguredEmptySensor(PTLevelBaseEntity, SensorEntity):
+    _attr_name = "Configured Empty (1)"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:arrow-down-bold-box-outline"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry, device_id=None):
+        super().__init__(coordinator, entry, device_id)
+        self._attr_unique_id = f"{self.hardware_id}_configured_empty"
+
+    @property
+    def native_value(self):
+        opts = self.entry.options
+        return opts.get(CONF_ZERO_AD, self.entry.data.get(CONF_ZERO_AD))
+
+class PTLevelConfiguredFullSensor(PTLevelBaseEntity, SensorEntity):
+    _attr_name = "Configured Full (1)"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:arrow-up-bold-box-outline"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry, device_id=None):
+        super().__init__(coordinator, entry, device_id)
+        self._attr_unique_id = f"{self.hardware_id}_configured_full"
+
+    @property
+    def native_value(self):
+        opts = self.entry.options
+        return opts.get(CONF_FULL_AD, self.entry.data.get(CONF_FULL_AD))

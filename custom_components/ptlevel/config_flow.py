@@ -108,15 +108,30 @@ class PTLevelOptionsFlowHandler(config_entries.OptionsFlow):
             # Save the new values to the options dictionary
             return self.async_create_entry(title="", data=user_input)
 
-        # Pre-fill the form with existing options, or fallback to data, or defaults
         opts = self.config_entry.options
         data = self.config_entry.data
         
-        schema = vol.Schema({
-            vol.Required(CONF_TANK_SIZE, default=opts.get(CONF_TANK_SIZE, data.get(CONF_TANK_SIZE, 3300))): int,
-            vol.Required(CONF_VOLUME_UNIT, default=opts.get(CONF_VOLUME_UNIT, data.get(CONF_VOLUME_UNIT, UNIT_IMP_GAL))): vol.In([UNIT_LITERS, UNIT_IMP_GAL, UNIT_US_GAL]),
-            vol.Optional(CONF_ZERO_AD, description={"suggested_value": opts.get(CONF_ZERO_AD, data.get(CONF_ZERO_AD))}): vol.Coerce(float),
-            vol.Optional(CONF_FULL_AD, description={"suggested_value": opts.get(CONF_FULL_AD, data.get(CONF_FULL_AD))}): vol.Coerce(float),
-        })
+        tank_size = opts.get(CONF_TANK_SIZE, data.get(CONF_TANK_SIZE, 3300))
+        vol_unit = opts.get(CONF_VOLUME_UNIT, data.get(CONF_VOLUME_UNIT, UNIT_IMP_GAL))
 
-        return self.async_show_form(step_id="init", data_schema=schema)
+        # Dynamically build the schema so Home Assistant doesn't crash on "None" defaults
+        schema_dict = {
+            vol.Required(CONF_TANK_SIZE, default=tank_size): int,
+            vol.Required(CONF_VOLUME_UNIT, default=vol_unit): vol.In([UNIT_LITERS, UNIT_IMP_GAL, UNIT_US_GAL]),
+        }
+
+        # Safely add the Zero/Empty AD text box
+        zero_ad = opts.get(CONF_ZERO_AD, data.get(CONF_ZERO_AD))
+        if zero_ad is not None:
+            schema_dict[vol.Optional(CONF_ZERO_AD, default=float(zero_ad))] = float
+        else:
+            schema_dict[vol.Optional(CONF_ZERO_AD)] = float
+
+        # Safely add the Full AD text box
+        full_ad = opts.get(CONF_FULL_AD, data.get(CONF_FULL_AD))
+        if full_ad is not None:
+            schema_dict[vol.Optional(CONF_FULL_AD, default=float(full_ad))] = float
+        else:
+            schema_dict[vol.Optional(CONF_FULL_AD)] = float
+
+        return self.async_show_form(step_id="init", data_schema=vol.Schema(schema_dict))
